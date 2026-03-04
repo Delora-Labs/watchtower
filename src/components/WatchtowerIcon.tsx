@@ -44,87 +44,64 @@ export function WatchtowerIcon({ className = "w-8 h-8" }: { className?: string }
 }
 
 export function WatchtowerBeacon({ className = "" }: { className?: string }) {
-  // Icon is 64x64 viewBox rendered at 96x96
-  // Light center in SVG: cx=32, cy=20
-  // At 96px: x=48px (center), y=30px from top
-  
   return (
-    <div 
-      className={`relative ${className}`} 
-      style={{ 
-        width: '96px', 
-        height: '96px',
-        perspective: '400px',
-      }}
-    >
-      {/* Tower icon (z-index 10 to be on top) */}
-      <div className="absolute inset-0 z-10">
-        <WatchtowerIcon className="w-24 h-24" />
-      </div>
+    <div className={`relative ${className}`}>
+      {/* Container centered around the icon */}
+      <div className="relative" style={{ width: '96px', height: '96px' }}>
+        
+        {/* Tower icon */}
+        <div className="absolute inset-0 z-10">
+          <WatchtowerIcon className="w-full h-full" />
+        </div>
 
-      {/* 3D Beam container - positioned at lamp location */}
-      {/* Lamp is at y=30px from top, centered horizontally */}
-      <div 
-        className="absolute"
-        style={{ 
-          top: '30px',
-          left: '48px',
-          width: '0px',
-          height: '0px',
-        }}
-      >
-        {/* Sweeping beam - rotates around Y axis for 3D effect */}
+        {/* Light beam animation - centered on lamp (31.25% from top = 20/64) */}
         <div 
-          className="animate-beacon-sweep"
+          className="absolute left-1/2 animate-beacon-sweep"
           style={{ 
-            transformStyle: 'preserve-3d',
-            transformOrigin: '0 0',
+            top: '31.25%',
+            transform: 'translateX(-50%)',
+            transformOrigin: 'center center',
+            perspective: '300px',
           }}
         >
-          {/* Left beam */}
+          {/* Horizontal beam bar */}
           <div 
+            className="relative"
             style={{
-              position: 'absolute',
-              width: '150px',
-              height: '8px',
-              left: '0',
-              top: '-4px',
-              background: 'linear-gradient(90deg, rgba(252,211,77,0.9) 0%, rgba(252,211,77,0.3) 60%, transparent 100%)',
-              borderRadius: '4px',
+              width: '240px',
+              height: '6px',
+              marginLeft: '-120px',
+              background: 'linear-gradient(90deg, transparent 0%, rgba(252,211,77,0.3) 20%, rgba(252,211,77,0.9) 50%, rgba(252,211,77,0.3) 80%, transparent 100%)',
+              borderRadius: '3px',
               filter: 'blur(2px)',
             }}
           />
-          {/* Right beam (opposite direction) */}
+          {/* Bright center core */}
           <div 
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
             style={{
-              position: 'absolute',
-              width: '150px',
-              height: '8px',
-              right: '0',
-              top: '-4px',
-              transform: 'rotate(180deg)',
-              transformOrigin: '0 50%',
-              background: 'linear-gradient(90deg, rgba(252,211,77,0.9) 0%, rgba(252,211,77,0.3) 60%, transparent 100%)',
-              borderRadius: '4px',
-              filter: 'blur(2px)',
+              width: '16px',
+              height: '16px',
+              background: 'radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(252,211,77,0.8) 50%, transparent 100%)',
+              borderRadius: '50%',
             }}
           />
         </div>
-      </div>
 
-      {/* Pulsing glow at lamp - exactly at light position */}
-      <div 
-        className="absolute animate-beacon-flare z-20"
-        style={{
-          top: '24px',
-          left: '42px',
-          width: '12px',
-          height: '12px',
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(252,211,77,0.9) 50%, transparent 100%)',
-          boxShadow: '0 0 20px 8px rgba(252,211,77,0.6)',
-        }}
-      />
+        {/* Static glow at lamp position */}
+        <div 
+          className="absolute left-1/2 -translate-x-1/2 animate-pulse z-5"
+          style={{
+            top: '31.25%',
+            marginTop: '-8px',
+            width: '16px',
+            height: '16px',
+            background: 'radial-gradient(circle, rgba(252,211,77,0.8) 0%, rgba(252,211,77,0.3) 50%, transparent 100%)',
+            borderRadius: '50%',
+            filter: 'blur(4px)',
+          }}
+        />
+      </div>
     </div>
   );
 }
