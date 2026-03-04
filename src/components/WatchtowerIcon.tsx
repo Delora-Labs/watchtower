@@ -46,25 +46,25 @@ export function WatchtowerIcon({ className = "w-8 h-8" }: { className?: string }
 export function WatchtowerBeacon({ className = "" }: { className?: string }) {
   return (
     <div className={`relative ${className}`}>
-      {/* Rotating light beams */}
+      {/* Rotating light beams - 200% bigger */}
       <div className="absolute inset-0 animate-beacon-rotate">
         {/* Primary beam */}
-        <div className="absolute top-1/2 left-1/2 w-24 h-1.5 -translate-y-1/2 origin-left">
+        <div className="absolute top-1/2 left-1/2 w-48 h-3 -translate-y-1/2 origin-left">
           <div className="w-full h-full bg-gradient-to-r from-yellow-400/80 via-yellow-400/40 to-transparent rounded-full blur-sm" />
         </div>
         {/* Opposite beam */}
-        <div className="absolute top-1/2 left-1/2 w-24 h-1.5 -translate-y-1/2 origin-left rotate-180">
+        <div className="absolute top-1/2 left-1/2 w-48 h-3 -translate-y-1/2 origin-left rotate-180">
           <div className="w-full h-full bg-gradient-to-r from-yellow-400/80 via-yellow-400/40 to-transparent rounded-full blur-sm" />
         </div>
       </div>
       
-      {/* Center tower icon */}
+      {/* Center tower icon - 200% bigger */}
       <div className="relative z-10">
-        <WatchtowerIcon className="w-12 h-12" />
+        <WatchtowerIcon className="w-24 h-24" />
       </div>
       
-      {/* Pulsing glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 bg-yellow-400/50 rounded-full blur-md animate-beacon-glow" />
+      {/* Pulsing glow - 200% bigger */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-yellow-400/50 rounded-full blur-lg animate-beacon-glow" />
     </div>
   );
 }
