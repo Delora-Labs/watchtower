@@ -45,53 +45,65 @@ export function WatchtowerIcon({ className = "w-8 h-8" }: { className?: string }
 
 export function WatchtowerBeacon({ className = "" }: { className?: string }) {
   return (
-    <div className={`relative ${className}`} style={{ perspective: '500px' }}>
-      {/* 3D Light beam - horizontal sweep POV */}
+    <div className={`relative ${className}`} style={{ perspective: '500px', width: '96px', height: '96px' }}>
+      {/* Center tower icon - positioned first for reference */}
+      <div className="absolute inset-0 z-10">
+        <WatchtowerIcon className="w-24 h-24" />
+      </div>
+
+      {/* 3D Light beam - aligned with lamp (top 30% of icon) */}
       <div 
-        className="absolute inset-0 animate-beacon-sweep"
-        style={{ transformStyle: 'preserve-3d' }}
+        className="absolute animate-beacon-sweep"
+        style={{ 
+          transformStyle: 'preserve-3d',
+          top: '30px',  /* Align with lamp position on icon */
+          left: '48px', /* Center horizontally */
+          transformOrigin: 'center center',
+        }}
       >
-        {/* Main beam cone */}
+        {/* Main beam cone - pointing upward from lamp */}
         <div 
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 origin-center"
+          className="origin-bottom"
           style={{
-            width: '300px',
-            height: '80px',
-            marginTop: '-70px',
-            background: 'linear-gradient(180deg, rgba(252,211,77,0.9) 0%, rgba(252,211,77,0.4) 40%, transparent 100%)',
-            clipPath: 'polygon(40% 0%, 60% 0%, 100% 100%, 0% 100%)',
-            filter: 'blur(4px)',
+            width: '200px',
+            height: '60px',
+            marginLeft: '-100px',
+            marginTop: '-60px',
+            background: 'linear-gradient(0deg, rgba(252,211,77,0.9) 0%, rgba(252,211,77,0.4) 50%, transparent 100%)',
+            clipPath: 'polygon(35% 100%, 65% 100%, 100% 0%, 0% 0%)',
+            filter: 'blur(3px)',
           }}
         />
         {/* Bright center of beam */}
         <div 
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 animate-beacon-intensity"
+          className="absolute animate-beacon-intensity origin-bottom"
           style={{
-            width: '150px',
-            height: '60px',
-            marginTop: '-65px',
-            background: 'linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(252,211,77,0.6) 50%, transparent 100%)',
-            clipPath: 'polygon(45% 0%, 55% 0%, 85% 100%, 15% 100%)',
+            width: '120px',
+            height: '50px',
+            left: '-60px',
+            top: '-50px',
+            background: 'linear-gradient(0deg, rgba(255,255,255,1) 0%, rgba(252,211,77,0.5) 60%, transparent 100%)',
+            clipPath: 'polygon(40% 100%, 60% 100%, 90% 0%, 10% 0%)',
           }}
         />
       </div>
 
-      {/* Light source flare */}
+      {/* Light source flare - at lamp position */}
       <div 
-        className="absolute top-1/2 left-1/2 w-16 h-16 rounded-full animate-beacon-flare"
+        className="absolute w-10 h-10 rounded-full animate-beacon-flare"
         style={{
-          marginTop: '-40px',
-          background: 'radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(252,211,77,0.8) 30%, transparent 70%)',
+          top: '22px',
+          left: '50%',
+          marginLeft: '-20px',
+          background: 'radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(252,211,77,0.8) 40%, transparent 70%)',
         }}
       />
       
-      {/* Center tower icon */}
-      <div className="relative z-10">
-        <WatchtowerIcon className="w-24 h-24" />
-      </div>
-      
-      {/* Ambient glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-yellow-400/30 rounded-full blur-xl" />
+      {/* Ambient glow at lamp */}
+      <div 
+        className="absolute w-8 h-8 bg-yellow-400/40 rounded-full blur-lg"
+        style={{ top: '24px', left: '50%', marginLeft: '-16px' }}
+      />
     </div>
   );
 }
