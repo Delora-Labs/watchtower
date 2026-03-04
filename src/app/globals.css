@@ -119,7 +119,7 @@ body {
 }
 
 .animate-beacon-rotate {
-  animation: beacon-rotate 8s linear infinite;
+  animation: beacon-rotate 6s linear infinite;
 }
 
 .animate-beacon-glow {

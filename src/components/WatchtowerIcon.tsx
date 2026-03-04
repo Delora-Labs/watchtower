@@ -44,64 +44,71 @@ export function WatchtowerIcon({ className = "w-8 h-8" }: { className?: string }
 }
 
 export function WatchtowerBeacon({ className = "" }: { className?: string }) {
+  // Lamp position: SVG cy=20 in 64x64 viewBox = 31.25% from top
+  // At 96px height = 30px from top
+  const lampY = 30;
+  const lampX = 48; // center
+  
   return (
-    <div className={`relative ${className}`}>
-      {/* Container centered around the icon */}
-      <div className="relative" style={{ width: '96px', height: '96px' }}>
-        
-        {/* Tower icon */}
-        <div className="absolute inset-0 z-10">
-          <WatchtowerIcon className="w-full h-full" />
-        </div>
-
-        {/* Light beam animation - centered on lamp (31.25% from top = 20/64) */}
-        <div 
-          className="absolute left-1/2 animate-beacon-sweep"
-          style={{ 
-            top: '31.25%',
-            transform: 'translateX(-50%)',
-            transformOrigin: 'center center',
-            perspective: '300px',
-          }}
-        >
-          {/* Horizontal beam bar */}
-          <div 
-            className="relative"
-            style={{
-              width: '240px',
-              height: '6px',
-              marginLeft: '-120px',
-              background: 'linear-gradient(90deg, transparent 0%, rgba(252,211,77,0.3) 20%, rgba(252,211,77,0.9) 50%, rgba(252,211,77,0.3) 80%, transparent 100%)',
-              borderRadius: '3px',
-              filter: 'blur(2px)',
-            }}
-          />
-          {/* Bright center core */}
-          <div 
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-            style={{
-              width: '16px',
-              height: '16px',
-              background: 'radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(252,211,77,0.8) 50%, transparent 100%)',
-              borderRadius: '50%',
-            }}
-          />
-        </div>
-
-        {/* Static glow at lamp position */}
-        <div 
-          className="absolute left-1/2 -translate-x-1/2 animate-pulse z-5"
+    <div className={`relative ${className}`} style={{ width: '96px', height: '96px' }}>
+      {/* Rotating beams - positioned at lamp, behind the icon */}
+      <div 
+        className="absolute animate-beacon-rotate"
+        style={{
+          top: `${lampY}px`,
+          left: `${lampX}px`,
+          width: '0',
+          height: '0',
+        }}
+      >
+        {/* Beam 1 */}
+        <div
           style={{
-            top: '31.25%',
-            marginTop: '-8px',
-            width: '16px',
-            height: '16px',
-            background: 'radial-gradient(circle, rgba(252,211,77,0.8) 0%, rgba(252,211,77,0.3) 50%, transparent 100%)',
-            borderRadius: '50%',
-            filter: 'blur(4px)',
+            position: 'absolute',
+            top: '-3px',
+            left: '0',
+            width: '120px',
+            height: '6px',
+            background: 'linear-gradient(90deg, rgba(252,211,77,0.95) 0%, rgba(252,211,77,0.5) 40%, rgba(252,211,77,0.1) 70%, transparent 100%)',
+            borderRadius: '0 3px 3px 0',
+            filter: 'blur(1px)',
+            transformOrigin: '0 50%',
+          }}
+        />
+        {/* Beam 2 (opposite) */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '-3px',
+            right: '0',
+            width: '120px',
+            height: '6px',
+            background: 'linear-gradient(270deg, rgba(252,211,77,0.95) 0%, rgba(252,211,77,0.5) 40%, rgba(252,211,77,0.1) 70%, transparent 100%)',
+            borderRadius: '3px 0 0 3px',
+            filter: 'blur(1px)',
+            transformOrigin: '100% 50%',
           }}
         />
       </div>
+
+      {/* Tower icon - on top */}
+      <div className="absolute inset-0 z-10">
+        <WatchtowerIcon className="w-full h-full" />
+      </div>
+
+      {/* Lamp glow - pulsing */}
+      <div 
+        className="absolute z-20 animate-pulse"
+        style={{
+          top: `${lampY - 6}px`,
+          left: `${lampX - 6}px`,
+          width: '12px',
+          height: '12px',
+          background: 'radial-gradient(circle, rgba(255,255,200,1) 0%, rgba(252,211,77,0.8) 40%, transparent 100%)',
+          borderRadius: '50%',
+          filter: 'blur(2px)',
+        }}
+      />
     </div>
   );
 }
