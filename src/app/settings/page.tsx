@@ -14,9 +14,11 @@ import {
   Copy,
   Check,
   X,
+  Activity,
+  Pencil,
 } from "lucide-react";
 
-type Tab = "general" | "teams" | "users";
+type Tab = "general" | "teams" | "users" | "healthchecks";
 
 interface Team {
   id: string;
@@ -32,6 +34,22 @@ interface User {
   name: string | null;
   role: "system_admin" | "team_lead" | "user";
   is_active: boolean;
+  created_at: string;
+}
+
+interface HealthCheck {
+  id: string;
+  name: string;
+  url: string;
+  method: "GET" | "HEAD";
+  expected_status: number;
+  timeout_ms: number;
+  is_enabled: boolean;
+  notify_on_down: boolean;
+  team_id: string | null;
+  status: "up" | "down" | "unknown";
+  last_checked_at: string | null;
+  last_response_time_ms: number | null;
   created_at: string;
 }
 
@@ -119,6 +137,453 @@ function GeneralSettings({ teams, users }: { teams: Team[]; users: User[] }) {
           </ol>
         </div>
       </div>
+    </div>
+  );
+}
+
+function HealthChecksTab({ teams }: { teams: Team[] }) {
+  const [healthChecks, setHealthChecks] = useState<HealthCheck[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [editingCheck, setEditingCheck] = useState<HealthCheck | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+
+  // Form state
+  const [formName, setFormName] = useState("");
+  const [formUrl, setFormUrl] = useState("");
+  const [formMethod, setFormMethod] = useState<"GET" | "HEAD">("GET");
+  const [formExpectedStatus, setFormExpectedStatus] = useState(200);
+  const [formTimeout, setFormTimeout] = useState(5000);
+  const [formEnabled, setFormEnabled] = useState(true);
+  const [formNotifyOnDown, setFormNotifyOnDown] = useState(true);
+  const [formTeamId, setFormTeamId] = useState<string>("");
+
+  const fetchHealthChecks = useCallback(async () => {
+    try {
+      const res = await fetch("/api/health-checks");
+      const json = await res.json();
+      if (json.error) {
+        setError(json.error);
+      } else {
+        setHealthChecks(json.data || []);
+      }
+    } catch {
+      setError("Failed to fetch health checks");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchHealthChecks();
+  }, [fetchHealthChecks]);
+
+  const resetForm = () => {
+    setFormName("");
+    setFormUrl("");
+    setFormMethod("GET");
+    setFormExpectedStatus(200);
+    setFormTimeout(5000);
+    setFormEnabled(true);
+    setFormNotifyOnDown(true);
+    setFormTeamId("");
+    setEditingCheck(null);
+  };
+
+  const openCreateModal = () => {
+    resetForm();
+    setShowModal(true);
+  };
+
+  const openEditModal = (check: HealthCheck) => {
+    setEditingCheck(check);
+    setFormName(check.name);
+    setFormUrl(check.url);
+    setFormMethod(check.method);
+    setFormExpectedStatus(check.expected_status);
+    setFormTimeout(check.timeout_ms);
+    setFormEnabled(check.is_enabled);
+    setFormNotifyOnDown(check.notify_on_down);
+    setFormTeamId(check.team_id || "");
+    setShowModal(true);
+  };
+
+  const validateUrl = (url: string): boolean => {
+    try {
+      new URL(url);
+      return url.startsWith("http://") || url.startsWith("https://");
+    } catch {
+      return false;
+    }
+  };
+
+  const saveHealthCheck = async () => {
+    if (!formName.trim() || !formUrl.trim()) return;
+    if (!validateUrl(formUrl)) {
+      setError("Invalid URL format. Must start with http:// or https://");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    const payload = {
+      name: formName,
+      url: formUrl,
+      method: formMethod,
+      expected_status: formExpectedStatus,
+      timeout_ms: formTimeout,
+      is_enabled: formEnabled,
+      notify_on_down: formNotifyOnDown,
+      team_id: formTeamId || null,
+    };
+
+    try {
+      const res = editingCheck
+        ? await fetch(`/api/health-checks/${editingCheck.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+        : await fetch("/api/health-checks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+      const json = await res.json();
+      if (json.error) {
+        setError(json.error);
+      } else {
+        setShowModal(false);
+        resetForm();
+        fetchHealthChecks();
+      }
+    } catch {
+      setError("Failed to save health check");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteHealthCheck = async (id: string) => {
+    try {
+      const res = await fetch(`/api/health-checks/${id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (json.error) {
+        setError(json.error);
+      } else {
+        fetchHealthChecks();
+      }
+    } catch {
+      setError("Failed to delete health check");
+    }
+    setDeleteConfirm(null);
+  };
+
+  const getStatusIndicator = (status: string) => {
+    switch (status) {
+      case "up":
+        return <span className="text-green-400">🟢</span>;
+      case "down":
+        return <span className="text-red-400">🔴</span>;
+      default:
+        return <span className="text-gray-400">⚪</span>;
+    }
+  };
+
+  const formatLastChecked = (timestamp: string | null) => {
+    if (!timestamp) return "Never";
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return date.toLocaleDateString();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {error && (
+        <div className="p-4 rounded-lg bg-red-900/50 border border-red-700 flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+          <span>{error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="ml-auto p-1 hover:bg-red-800 rounded"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Add Health Check Button */}
+      <button
+        onClick={openCreateModal}
+        className="w-full py-4 sm:py-3 rounded-xl border-2 border-dashed border-gray-700 text-gray-400 hover:border-gray-600 hover:text-white flex items-center justify-center gap-2 transition min-h-[56px]"
+      >
+        <Plus className="w-5 h-5" />
+        Add Health Check
+      </button>
+
+      {/* Health Checks List */}
+      <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
+        <div className="px-4 py-3 bg-gray-800/50 border-b border-gray-800 flex items-center justify-between">
+          <h2 className="font-bold">Health Checks ({healthChecks.length})</h2>
+          <button
+            onClick={fetchHealthChecks}
+            className="p-2 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition"
+            title="Refresh"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+        {healthChecks.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>No health checks configured</p>
+            <p className="text-sm">Add a health check to monitor external endpoints</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-800">
+            {healthChecks.map((check) => (
+              <div
+                key={check.id}
+                className="px-4 py-4 sm:py-3 hover:bg-gray-800/30"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="text-xl">{getStatusIndicator(check.status)}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate">{check.name}</span>
+                        {!check.is_enabled && (
+                          <span className="text-xs px-2 py-0.5 bg-gray-700 rounded">Disabled</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-400 truncate">{check.url}</div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-gray-500">
+                        <span>{check.method}</span>
+                        <span>•</span>
+                        <span>Last: {formatLastChecked(check.last_checked_at)}</span>
+                        {check.last_response_time_ms !== null && (
+                          <>
+                            <span>•</span>
+                            <span>{check.last_response_time_ms}ms</span>
+                          </>
+                        )}
+                        {check.team_id && (
+                          <>
+                            <span>•</span>
+                            <span className="text-blue-400">
+                              {teams.find(t => t.id === check.team_id)?.name || "Team"}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => openEditModal(check)}
+                      className="p-3 sm:p-2 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+                    >
+                      <Pencil className="w-5 h-5 sm:w-4 sm:h-4" />
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm({ id: check.id, name: check.name })}
+                      className="p-3 sm:p-2 rounded-lg hover:bg-red-900/50 text-gray-400 hover:text-red-400 transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+                    >
+                      <Trash2 className="w-5 h-5 sm:w-4 sm:h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Status Legend */}
+      <div className="rounded-xl bg-gray-900 border border-gray-800 p-4">
+        <h3 className="text-sm font-medium mb-3">Status Indicators</h3>
+        <div className="flex flex-wrap gap-4 text-sm text-gray-400">
+          <span>🟢 Up - responding correctly</span>
+          <span>🔴 Down - not responding or wrong status</span>
+          <span>⚪ Unknown - not checked yet</span>
+        </div>
+      </div>
+
+      {/* Create/Edit Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50">
+          <div className="bg-gray-900 rounded-t-xl sm:rounded-xl p-6 w-full sm:max-w-lg border-t sm:border border-gray-700 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold mb-4">
+              {editingCheck ? "Edit Health Check" : "Add Health Check"}
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  Name *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Production API"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none text-base"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  URL *
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://api.example.com/health"
+                  value={formUrl}
+                  onChange={(e) => setFormUrl(e.target.value)}
+                  className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none text-base"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    Method
+                  </label>
+                  <select
+                    value={formMethod}
+                    onChange={(e) => setFormMethod(e.target.value as "GET" | "HEAD")}
+                    className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none text-base"
+                  >
+                    <option value="GET">GET</option>
+                    <option value="HEAD">HEAD</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    Expected Status
+                  </label>
+                  <input
+                    type="number"
+                    value={formExpectedStatus}
+                    onChange={(e) => setFormExpectedStatus(parseInt(e.target.value) || 200)}
+                    className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none text-base"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  Timeout (ms)
+                </label>
+                <input
+                  type="number"
+                  value={formTimeout}
+                  onChange={(e) => setFormTimeout(parseInt(e.target.value) || 5000)}
+                  className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none text-base"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  Team (optional)
+                </label>
+                <select
+                  value={formTeamId}
+                  onChange={(e) => setFormTeamId(e.target.value)}
+                  className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none text-base"
+                >
+                  <option value="">No team</option>
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Alerts will be sent to team&apos;s webhook if configured
+                </p>
+              </div>
+              <div className="space-y-3 pt-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formEnabled}
+                    onChange={(e) => setFormEnabled(e.target.checked)}
+                    className="w-5 h-5 rounded bg-gray-800 border-gray-600 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm">Enabled</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formNotifyOnDown}
+                    onChange={(e) => setFormNotifyOnDown(e.target.checked)}
+                    className="w-5 h-5 rounded bg-gray-800 border-gray-600 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm">Notify when down</span>
+                </label>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 pt-4">
+                <button
+                  onClick={() => {
+                    setShowModal(false);
+                    resetForm();
+                  }}
+                  className="flex-1 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition min-h-[48px]"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveHealthCheck}
+                  disabled={!formName.trim() || !formUrl.trim() || saving}
+                  className="flex-1 py-3 sm:py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
+                >
+                  {saving ? "Saving..." : editingCheck ? "Save Changes" : "Add Health Check"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50">
+          <div className="bg-gray-900 rounded-t-xl sm:rounded-xl p-6 w-full sm:max-w-md border-t sm:border border-gray-700">
+            <h2 className="text-xl font-bold mb-2">Delete Health Check?</h2>
+            <p className="text-gray-400 mb-4">
+              Are you sure you want to delete &quot;{deleteConfirm.name}&quot;? This action cannot be undone.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition min-h-[48px]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteHealthCheck(deleteConfirm.id)}
+                className="flex-1 py-3 sm:py-2 rounded-lg bg-red-600 hover:bg-red-700 transition min-h-[48px]"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -289,6 +754,7 @@ export default function SettingsPage() {
     { id: "general" as Tab, label: "General", icon: Settings },
     { id: "teams" as Tab, label: "Teams", icon: UsersRound },
     { id: "users" as Tab, label: "Users", icon: Users },
+    { id: "healthchecks" as Tab, label: "Health Checks", icon: Activity },
   ];
 
   if (loading) {
@@ -637,6 +1103,11 @@ export default function SettingsPage() {
               )}
             </div>
           </div>
+        )}
+
+        {/* Health Checks Tab */}
+        {activeTab === "healthchecks" && (
+          <HealthChecksTab teams={teams} />
         )}
 
         {/* Delete Confirmation Modal - full screen on mobile */}

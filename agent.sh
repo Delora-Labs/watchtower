@@ -126,6 +126,48 @@ if (data.commands && data.commands.length > 0) {
     fi
   done
   
+  # Perform HTTP health checks
+  HEALTH_CHECKS=$(curl -s "$DASHBOARD_URL/api/health-checks/active" \
+    -H "Authorization: Bearer $API_KEY" 2>/dev/null)
+  
+  if [ -n "$HEALTH_CHECKS" ] && [ "$HEALTH_CHECKS" != "null" ]; then
+    # Parse and check each URL
+    echo "$HEALTH_CHECKS" | node -e "
+const data = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+if (Array.isArray(data)) {
+  data.forEach(check => {
+    console.log(check.id + '|' + check.url + '|' + (check.expected_status || 200));
+  });
+}
+" 2>/dev/null | while IFS='|' read -r CHECK_ID URL EXPECTED_STATUS; do
+      [ -z "$CHECK_ID" ] && continue
+      
+      # Measure response time and get status code
+      START_TIME=$(date +%s%3N)
+      HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$URL" 2>/dev/null || echo "000")
+      END_TIME=$(date +%s%3N)
+      RESPONSE_TIME=$((END_TIME - START_TIME))
+      
+      # Determine status based on HTTP code
+      if [ "$HTTP_CODE" -eq "${EXPECTED_STATUS:-200}" ]; then
+        STATUS="healthy"
+      elif [ "$HTTP_CODE" -eq "000" ]; then
+        STATUS="timeout"
+      else
+        STATUS="unhealthy"
+      fi
+      
+      # Report result to dashboard
+      curl -s -X POST "$DASHBOARD_URL/api/health-checks/$CHECK_ID/results" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $API_KEY" \
+        -d "{\"status\": \"$STATUS\", \"response_time_ms\": $RESPONSE_TIME, \"status_code\": $HTTP_CODE}" \
+        >/dev/null 2>&1
+      
+      echo "[Health Check] $URL -> $HTTP_CODE ($STATUS, ${RESPONSE_TIME}ms)"
+    done
+  fi
+  
   # Send recent logs every cycle
   send_logs
   

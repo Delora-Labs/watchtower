@@ -253,3 +253,117 @@ async function sendServerDownAlert(webhookUrl: string, serverName: string) {
     console.error("Teams webhook error:", err);
   }
 }
+
+// Process health check alerts for status changes
+export async function processHealthCheckAlerts(
+  checkId: string,
+  checkName: string,
+  status: string,
+  previousStatus: string
+) {
+  // Only alert on actual status changes involving "down"
+  if (status === previousStatus) return;
+
+  // Health check went DOWN (was up, now down)
+  if (previousStatus !== "down" && status === "down") {
+    await createHealthCheckAlert(
+      checkId,
+      "health_check_down",
+      `🔴 Health Check **${checkName}** is DOWN`,
+      "critical"
+    );
+    await sendHealthCheckTeamsAlert(checkId, checkName, "down");
+  }
+
+  // Health check RECOVERED (was down, now up)
+  if (previousStatus === "down" && status === "up") {
+    await createHealthCheckAlert(
+      checkId,
+      "health_check_recovered",
+      `🟢 Health Check **${checkName}** has RECOVERED`,
+      "info"
+    );
+    await sendHealthCheckTeamsAlert(checkId, checkName, "up");
+  }
+}
+
+async function createHealthCheckAlert(
+  checkId: string,
+  type: string,
+  message: string,
+  severity: string
+) {
+  const id = generateId();
+  await execute(
+    `INSERT INTO alerts (id, server_id, app_id, type, message, severity)
+     VALUES (?, NULL, NULL, ?, ?, ?)`,
+    [id, type, message, severity]
+  );
+  
+  // Store health_check_id in a way we can reference (using app_id field for now)
+  // In production you'd want a health_check_id column in alerts
+  return id;
+}
+
+async function sendHealthCheckTeamsAlert(
+  checkId: string,
+  checkName: string,
+  status: "up" | "down"
+) {
+  // Get default webhook
+  const setting = await queryOne<{ value: string }>(
+    `SELECT value FROM settings WHERE \`key\` = 'default_teams_webhook'`
+  );
+
+  if (!setting?.value) return;
+
+  const statusEmoji = status === "up" ? "🟢" : "🔴";
+  const statusText = status === "up" ? "RECOVERED" : "DOWN";
+  const color = status === "up" ? "Good" : "Attention";
+
+  const card = {
+    type: "message",
+    attachments: [
+      {
+        contentType: "application/vnd.microsoft.card.adaptive",
+        content: {
+          $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+          type: "AdaptiveCard",
+          version: "1.4",
+          body: [
+            {
+              type: "TextBlock",
+              size: "Large",
+              weight: "Bolder",
+              text: `${statusEmoji} Health Check: ${checkName} is ${statusText}`,
+              color: color,
+            },
+            {
+              type: "FactSet",
+              facts: [
+                { title: "Check", value: checkName },
+                { title: "Status", value: statusText },
+                { title: "Time", value: new Date().toISOString() },
+              ],
+            },
+          ],
+          msteams: { width: "Full" },
+        },
+      },
+    ],
+  };
+
+  try {
+    const res = await fetch(setting.value, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(card),
+    });
+
+    if (!res.ok) {
+      console.error(`Health check Teams webhook failed: ${res.status}`);
+    }
+  } catch (err) {
+    console.error("Health check Teams webhook error:", err);
+  }
+}

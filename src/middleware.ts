@@ -9,6 +9,8 @@ const publicApiRoutes = [
   "/api/heartbeat", // Server agent heartbeats
   "/api/commands/", // Command results from agents
   "/api/logs", // Log ingestion from agents (POST)
+  "/api/health-checks/active", // Health checks for agent
+  "/api/health-checks/", // Health check results from agents
 ];
 
 export function middleware(request: NextRequest) {

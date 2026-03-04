@@ -27,6 +27,8 @@ import {
   Square,
   ChevronRight,
   Menu,
+  Globe,
+  Activity,
 } from "lucide-react";
 
 interface App {
@@ -76,6 +78,20 @@ interface AppFormData {
   team_id: string;
   notify_on_down: boolean;
   notify_on_restart: boolean;
+}
+
+interface HealthCheck {
+  id: string;
+  name: string;
+  url: string;
+  method: string;
+  expected_status: number;
+  timeout_ms: number;
+  interval_ms: number;
+  enabled: boolean;
+  latest_status: string | null;
+  latest_response_time_ms: number | null;
+  latest_checked_at: string | null;
 }
 
 const CATEGORIES = [
@@ -658,6 +674,7 @@ export default function Dashboard() {
   });
   const [savingApp, setSavingApp] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [healthChecks, setHealthChecks] = useState<HealthCheck[]>([]);
 
   const fetchTeams = useCallback(async () => {
     try {
@@ -688,12 +705,28 @@ export default function Dashboard() {
     }
   }, []);
 
+  const fetchHealthChecks = useCallback(async () => {
+    try {
+      const res = await fetch("/api/health-checks");
+      const json = await res.json();
+      if (!json.error) {
+        setHealthChecks(json.data);
+      }
+    } catch {
+      // Ignore health check fetch errors
+    }
+  }, []);
+
   useEffect(() => {
     fetchServers();
     fetchTeams();
-    const interval = setInterval(fetchServers, 10000);
+    fetchHealthChecks();
+    const interval = setInterval(() => {
+      fetchServers();
+      fetchHealthChecks();
+    }, 10000);
     return () => clearInterval(interval);
-  }, [fetchServers, fetchTeams]);
+  }, [fetchServers, fetchTeams, fetchHealthChecks]);
 
   const addServer = async () => {
     if (!newServerName.trim()) return;
@@ -1362,6 +1395,109 @@ export default function Dashboard() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Health Checks Section */}
+        {healthChecks.length > 0 && (
+          <div className="mt-6 md:mt-8">
+            <div className="flex items-center gap-3 mb-4">
+              <Activity className="w-5 h-5 text-blue-400" />
+              <h2 className="text-lg font-bold">Health Checks</h2>
+              <span className="text-sm text-gray-400">({healthChecks.length})</span>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Group: Down first, then Up */}
+              {healthChecks.map((check) => {
+                const isDown = check.latest_status === "down";
+                const isUp = check.latest_status === "up";
+                const statusColor = isDown 
+                  ? "bg-red-500" 
+                  : isUp 
+                    ? "bg-green-500" 
+                    : "bg-gray-500";
+                const statusEmoji = isDown ? "🔴" : isUp ? "🟢" : "⚪";
+                const statusText = isDown ? "Down" : isUp ? "Up" : "Unknown";
+                
+                return (
+                  <div
+                    key={check.id}
+                    className={`rounded-xl bg-gray-900 border overflow-hidden ${
+                      isDown ? "border-red-700" : "border-gray-800"
+                    }`}
+                  >
+                    {/* Header */}
+                    <div className={`px-4 py-3 ${isDown ? "bg-red-900/30" : "bg-gray-800/50"}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className={`w-2.5 h-2.5 rounded-full ${statusColor} ${isDown ? "animate-pulse" : ""}`} />
+                          <span className="font-medium truncate">{check.name}</span>
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                          isDown 
+                            ? "bg-red-900/50 text-red-400" 
+                            : isUp 
+                              ? "bg-green-900/50 text-green-400"
+                              : "bg-gray-700 text-gray-400"
+                        }`}>
+                          {statusEmoji} {statusText}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* Body */}
+                    <div className="px-4 py-3 space-y-2">
+                      {/* URL */}
+                      <div className="flex items-center gap-2 text-sm text-gray-400">
+                        <Globe className="w-4 h-4 flex-shrink-0" />
+                        <a
+                          href={check.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="truncate hover:text-blue-400 transition"
+                        >
+                          {check.url.replace(/https?:\/\//, "")}
+                        </a>
+                        <ExternalLink className="w-3 h-3 flex-shrink-0 opacity-50" />
+                      </div>
+                      
+                      {/* Stats row */}
+                      <div className="flex items-center justify-between text-xs text-gray-500">
+                        <div className="flex items-center gap-3">
+                          {/* Response time */}
+                          {check.latest_response_time_ms !== null && (
+                            <span className={`flex items-center gap-1 ${
+                              check.latest_response_time_ms > 1000 
+                                ? "text-yellow-400" 
+                                : check.latest_response_time_ms > 500 
+                                  ? "text-orange-400" 
+                                  : "text-green-400"
+                            }`}>
+                              ⚡ {check.latest_response_time_ms}ms
+                            </span>
+                          )}
+                          
+                          {/* Method */}
+                          <span className="text-gray-500">{check.method}</span>
+                        </div>
+                        
+                        {/* Last checked */}
+                        {check.latest_checked_at && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(check.latest_checked_at).toLocaleTimeString([], { 
+                              hour: "2-digit", 
+                              minute: "2-digit" 
+                            })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </main>
