@@ -92,6 +92,7 @@ if (data.commands && data.commands.length > 0) {
     CMD_ID=$(echo "$CMD" | cut -d: -f3)
     
     RESULT=1
+    CMD_RESULT=""
     if [ "$ACTION" = "restart" ]; then
       echo "Restarting $APP..."
       pm2 restart "$APP" 2>&1
@@ -104,13 +105,25 @@ if (data.commands && data.commands.length > 0) {
       echo "Stopping $APP..."
       pm2 stop "$APP" 2>&1
       RESULT=$?
+    elif [ "$ACTION" = "logs" ]; then
+      echo "Fetching logs for $APP..."
+      CMD_RESULT=$(pm2 logs "$APP" --nostream --lines 100 2>&1)
+      RESULT=$?
     fi
     
     # Report completion
-    curl -s -X PATCH "$DASHBOARD_URL/api/commands/$CMD_ID" \
-      -H "Content-Type: application/json" \
-      -H "Authorization: Bearer $API_KEY" \
-      -d "{\"success\": $([ $RESULT -eq 0 ] && echo 'true' || echo 'false')}"
+    if [ -n "$CMD_RESULT" ]; then
+      # For commands with output (like logs), include the result text
+      curl -s -X PATCH "$DASHBOARD_URL/api/commands/$CMD_ID" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $API_KEY" \
+        -d "{\"success\": $([ $RESULT -eq 0 ] && echo 'true' || echo 'false'), \"result\": $(echo "$CMD_RESULT" | jq -Rs .)}"
+    else
+      curl -s -X PATCH "$DASHBOARD_URL/api/commands/$CMD_ID" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $API_KEY" \
+        -d "{\"success\": $([ $RESULT -eq 0 ] && echo 'true' || echo 'false')}"
+    fi
   done
   
   # Send recent logs every cycle
