@@ -46,21 +46,32 @@ export function WatchtowerIcon({ className = "w-8 h-8" }: { className?: string }
 export function WatchtowerBeacon({ className = "" }: { className?: string }) {
   return (
     <div className={`relative ${className}`}>
-      {/* Spinning light beams */}
+      {/* Spinning light beams - large and dramatic */}
       <div className="absolute inset-0 animate-spin-slow">
-        <div className="absolute top-1/2 left-1/2 w-32 h-1 -translate-x-1/2 -translate-y-1/2 origin-left">
-          <div className="w-full h-full bg-gradient-to-r from-yellow-400/60 via-yellow-400/20 to-transparent rounded-full blur-sm" />
+        <div className="absolute top-1/2 left-1/2 w-80 h-2 -translate-x-1/2 -translate-y-1/2 origin-left">
+          <div className="w-full h-full bg-gradient-to-r from-yellow-400/70 via-yellow-400/30 to-transparent rounded-full blur-md" />
         </div>
-        <div className="absolute top-1/2 left-1/2 w-32 h-1 -translate-x-1/2 -translate-y-1/2 origin-left rotate-180">
-          <div className="w-full h-full bg-gradient-to-r from-yellow-400/60 via-yellow-400/20 to-transparent rounded-full blur-sm" />
+        <div className="absolute top-1/2 left-1/2 w-80 h-2 -translate-x-1/2 -translate-y-1/2 origin-left rotate-180">
+          <div className="w-full h-full bg-gradient-to-r from-yellow-400/70 via-yellow-400/30 to-transparent rounded-full blur-md" />
         </div>
       </div>
-      {/* Center tower icon */}
+      {/* Secondary dimmer beams for depth */}
+      <div className="absolute inset-0 animate-spin-slow" style={{ animationDelay: '-2s' }}>
+        <div className="absolute top-1/2 left-1/2 w-64 h-1 -translate-x-1/2 -translate-y-1/2 origin-left rotate-45">
+          <div className="w-full h-full bg-gradient-to-r from-yellow-300/40 via-yellow-300/10 to-transparent rounded-full blur-sm" />
+        </div>
+        <div className="absolute top-1/2 left-1/2 w-64 h-1 -translate-x-1/2 -translate-y-1/2 origin-left -rotate-135">
+          <div className="w-full h-full bg-gradient-to-r from-yellow-300/40 via-yellow-300/10 to-transparent rounded-full blur-sm" />
+        </div>
+      </div>
+      {/* Center tower icon - bigger */}
       <div className="relative z-10">
-        <WatchtowerIcon className="w-12 h-12" />
+        <WatchtowerIcon className="w-24 h-24" />
       </div>
-      {/* Glow effect */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 bg-yellow-400/30 rounded-full blur-md animate-pulse" />
+      {/* Main glow effect - larger and brighter */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-yellow-400/40 rounded-full blur-xl animate-pulse" />
+      {/* Inner glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-yellow-300/60 rounded-full blur-md animate-pulse" />
     </div>
   );
 }
