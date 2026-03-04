@@ -63,6 +63,8 @@ interface AppStats {
   display_name: string | null;
   cpu_percent: number;
   memory_mb: number;
+  avg_cpu_5min: number;
+  avg_memory_5min: number;
   status: string;
 }
 
@@ -540,29 +542,29 @@ function AnalyticsContent() {
                           </span>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <div className="text-xs text-gray-400 mb-1">CPU</div>
-                            <div className="text-blue-400 font-medium text-sm">{app.cpu_percent}%</div>
+                          <div title={`Instant: ${app.cpu_percent}%`}>
+                            <div className="text-xs text-gray-400 mb-1">CPU <span className="text-gray-500">(5m avg)</span></div>
+                            <div className="text-blue-400 font-medium text-sm">{Math.round(app.avg_cpu_5min ?? app.cpu_percent)}%</div>
                             <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden mt-1">
                               <div 
                                 className="h-full bg-blue-500 rounded-full transition-all"
-                                style={{ width: `${Math.min(app.cpu_percent, 100)}%` }}
+                                style={{ width: `${Math.min(app.avg_cpu_5min ?? app.cpu_percent, 100)}%` }}
                               />
                             </div>
                           </div>
-                          <div>
-                            <div className="text-xs text-gray-400 mb-1">Memory</div>
+                          <div title={`Instant: ${app.memory_mb >= 1024 ? `${(app.memory_mb / 1024).toFixed(1)} GB` : `${Math.round(app.memory_mb)} MB`}`}>
+                            <div className="text-xs text-gray-400 mb-1">Memory <span className="text-gray-500">(5m avg)</span></div>
                             <div className="text-emerald-400 font-medium text-sm">
-                              {app.memory_mb >= 1024 
-                                ? `${(app.memory_mb / 1024).toFixed(1)} GB`
-                                : `${Math.round(app.memory_mb)} MB`
+                              {(app.avg_memory_5min ?? app.memory_mb) >= 1024 
+                                ? `${((app.avg_memory_5min ?? app.memory_mb) / 1024).toFixed(1)} GB`
+                                : `${Math.round(app.avg_memory_5min ?? app.memory_mb)} MB`
                               }
                             </div>
                             <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden mt-1">
                               <div 
                                 className="h-full bg-emerald-500 rounded-full transition-all"
                                 style={{ 
-                                  width: `${Math.min((app.memory_mb / (metricsData?.current?.memoryTotal || 1000)) * 100, 100)}%` 
+                                  width: `${Math.min(((app.avg_memory_5min ?? app.memory_mb) / (metricsData?.current?.memoryTotal || 1000)) * 100, 100)}%` 
                                 }}
                               />
                             </div>
@@ -579,15 +581,15 @@ function AnalyticsContent() {
                       <tr className="text-left text-gray-400 text-sm border-b border-gray-800">
                         <th className="pb-3">Application</th>
                         <th className="pb-3 text-right">Status</th>
-                        <th className="pb-3 text-right">CPU</th>
-                        <th className="pb-3 text-right">Memory</th>
+                        <th className="pb-3 text-right">CPU <span className="text-xs text-gray-500">(5m avg)</span></th>
+                        <th className="pb-3 text-right">Memory <span className="text-xs text-gray-500">(5m avg)</span></th>
                         <th className="pb-3 w-48">CPU Bar</th>
                         <th className="pb-3 w-48">Memory Bar</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-800">
                       {appStats
-                        .sort((a, b) => b.cpu_percent - a.cpu_percent)
+                        .sort((a, b) => (b.avg_cpu_5min ?? b.cpu_percent) - (a.avg_cpu_5min ?? a.cpu_percent))
                         .map((app) => (
                           <tr key={app.pm2_name} className="hover:bg-gray-800/30">
                             <td className="py-3">
@@ -604,20 +606,20 @@ function AnalyticsContent() {
                                 {app.status}
                               </span>
                             </td>
-                            <td className="py-3 text-right text-blue-400">
-                              {app.cpu_percent}%
+                            <td className="py-3 text-right text-blue-400" title={`Instant: ${app.cpu_percent}%`}>
+                              {Math.round(app.avg_cpu_5min ?? app.cpu_percent)}%
                             </td>
-                            <td className="py-3 text-right text-emerald-400">
-                              {app.memory_mb >= 1024 
-                                ? `${(app.memory_mb / 1024).toFixed(1)} GB`
-                                : `${Math.round(app.memory_mb)} MB`
+                            <td className="py-3 text-right text-emerald-400" title={`Instant: ${app.memory_mb >= 1024 ? `${(app.memory_mb / 1024).toFixed(1)} GB` : `${Math.round(app.memory_mb)} MB`}`}>
+                              {(app.avg_memory_5min ?? app.memory_mb) >= 1024 
+                                ? `${((app.avg_memory_5min ?? app.memory_mb) / 1024).toFixed(1)} GB`
+                                : `${Math.round(app.avg_memory_5min ?? app.memory_mb)} MB`
                               }
                             </td>
                             <td className="py-3">
                               <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
                                 <div 
                                   className="h-full bg-blue-500 rounded-full"
-                                  style={{ width: `${Math.min(app.cpu_percent, 100)}%` }}
+                                  style={{ width: `${Math.min(app.avg_cpu_5min ?? app.cpu_percent, 100)}%` }}
                                 />
                               </div>
                             </td>
@@ -626,7 +628,7 @@ function AnalyticsContent() {
                                 <div 
                                   className="h-full bg-emerald-500 rounded-full"
                                   style={{ 
-                                    width: `${Math.min((app.memory_mb / (metricsData?.current?.memoryTotal || 1000)) * 100, 100)}%` 
+                                    width: `${Math.min(((app.avg_memory_5min ?? app.memory_mb) / (metricsData?.current?.memoryTotal || 1000)) * 100, 100)}%` 
                                   }}
                                 />
                               </div>

@@ -10,27 +10,46 @@ LAST_LOG_TIME=$(date +%s)
 # Function to collect and send logs
 send_logs() {
   # Get recent PM2 logs (last 30 seconds worth)
-  LOGS=$(pm2 logs --nostream --lines 50 --raw 2>/dev/null | tail -20)
+  LOGS=$(pm2 logs --nostream --lines 50 2>/dev/null | tail -30)
   
   if [ -n "$LOGS" ]; then
     # Parse and send logs
     echo "$LOGS" | while IFS= read -r line; do
-      # Skip empty lines
-      [ -z "$line" ] && continue
+      # Strip ANSI color codes
+      CLEAN_LINE=$(echo "$line" | sed 's/\x1b\[[0-9;]*m//g')
       
-      # Extract app name if present (format: "PM2 | app-name | message")
-      APP_NAME=$(echo "$line" | grep -oP '^\d+\|[\w-]+' | cut -d'|' -f2 | tr -d ' ' || echo "system")
+      # Skip empty lines and whitespace-only lines
+      [ -z "$(echo "$CLEAN_LINE" | tr -d '[:space:]')" ] && continue
       
-      # Determine log level
+      # Skip PM2 header lines
+      echo "$CLEAN_LINE" | grep -qE '(Tailing last|\.pm2/logs/|last [0-9]+ lines)' && continue
+      
+      # Skip PM2 table formatting lines (box drawing chars)
+      echo "$CLEAN_LINE" | grep -qE '^[├└│─┼┤┬┴]+' && continue
+      
+      # Extract app name from PM2 prefix format: "22|watchtower  | message" or "22|app-name |message"
+      APP_NAME=""
+      MESSAGE="$CLEAN_LINE"
+      if echo "$CLEAN_LINE" | grep -qE '^[0-9]+\|[^|]+\|'; then
+        APP_NAME=$(echo "$CLEAN_LINE" | sed -E 's/^[0-9]+\|([^|]+)\|.*/\1/' | xargs)
+        MESSAGE=$(echo "$CLEAN_LINE" | sed -E 's/^[0-9]+\|[^|]+\|[ ]*//')
+      fi
+      [ -z "$APP_NAME" ] && APP_NAME="system"
+      
+      # Skip if message is empty after extraction
+      [ -z "$(echo "$MESSAGE" | tr -d '[:space:]')" ] && continue
+      
+      # Determine log level from content
       LEVEL="info"
-      echo "$line" | grep -qi "error" && LEVEL="error"
-      echo "$line" | grep -qi "warn" && LEVEL="warn"
+      echo "$MESSAGE" | grep -qiE '(error|exception|fatal|failed|crash)' && LEVEL="error"
+      echo "$MESSAGE" | grep -qiE '(warn|warning)' && LEVEL="warn"
+      echo "$MESSAGE" | grep -qiE '(debug)' && LEVEL="debug"
       
       # Send to dashboard
       curl -s -X POST "$DASHBOARD_URL/api/logs" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer $API_KEY" \
-        -d "{\"server_id\": \"$SERVER_ID\", \"app_name\": \"$APP_NAME\", \"level\": \"$LEVEL\", \"message\": $(echo "$line" | jq -Rs .)}" \
+        -d "{\"server_id\": \"$SERVER_ID\", \"app_name\": \"$APP_NAME\", \"level\": \"$LEVEL\", \"message\": $(echo "$MESSAGE" | jq -Rs .)}" \
         >/dev/null 2>&1
     done
   fi
@@ -107,8 +126,16 @@ if (data.commands && data.commands.length > 0) {
       RESULT=$?
     elif [ "$ACTION" = "logs" ]; then
       echo "Fetching logs for $APP..."
-      CMD_RESULT=$(pm2 logs "$APP" --nostream --lines 100 2>&1)
+      # Get raw logs and clean them
+      RAW_LOGS=$(pm2 logs "$APP" --nostream --lines 100 2>&1)
       RESULT=$?
+      # Strip ANSI codes, remove PM2 headers, keep meaningful content
+      CMD_RESULT=$(echo "$RAW_LOGS" | \
+        sed 's/\x1b\[[0-9;]*m//g' | \
+        grep -vE '(Tailing last|\.pm2/logs/|last [0-9]+ lines)' | \
+        grep -vE '^[├└│─┼┤┬┴]+' | \
+        sed 's/^[[:space:]]*$//' | \
+        grep -v '^$')
     fi
     
     # Report completion

@@ -29,6 +29,8 @@ export async function GET() {
       status: string;
       cpu_percent: number;
       memory_mb: number;
+      avg_cpu_5min: number;
+      avg_memory_5min: number;
       uptime_ms: number;
       restarts: number;
       last_seen: Date;
@@ -39,8 +41,20 @@ export async function GET() {
     let apps: AppRow[];
     
     if (!user || canViewAllApps(user.role)) {
-      // System admin or unauthenticated (agent API) sees all apps
-      apps = await query<AppRow>("SELECT a.*, aa.team_id FROM apps a LEFT JOIN app_assignments aa ON a.id = aa.app_id ORDER BY a.pm2_name");
+      // System admin or unauthenticated (agent API) sees all apps with 5-min averages
+      apps = await query<AppRow>(`
+        SELECT 
+          a.*, 
+          aa.team_id,
+          COALESCE(AVG(m.cpu_percent), a.cpu_percent) as avg_cpu_5min,
+          COALESCE(AVG(m.memory_mb), a.memory_mb) as avg_memory_5min
+        FROM apps a 
+        LEFT JOIN app_assignments aa ON a.id = aa.app_id 
+        LEFT JOIN app_metrics m ON m.app_id = a.id 
+          AND m.recorded_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+        GROUP BY a.id, aa.team_id
+        ORDER BY a.pm2_name
+      `);
     } else {
       // Team lead or user: only see apps assigned to their teams
       const teamIds = await getUserTeamIds(user.id);
@@ -49,10 +63,18 @@ export async function GET() {
       } else {
         const placeholders = teamIds.map(() => "?").join(",");
         apps = await query<AppRow>(
-          `SELECT a.*, aa.team_id FROM apps a 
-           JOIN app_assignments aa ON a.id = aa.app_id 
-           WHERE aa.team_id IN (${placeholders})
-           ORDER BY a.pm2_name`,
+          `SELECT 
+            a.*, 
+            aa.team_id,
+            COALESCE(AVG(m.cpu_percent), a.cpu_percent) as avg_cpu_5min,
+            COALESCE(AVG(m.memory_mb), a.memory_mb) as avg_memory_5min
+          FROM apps a 
+          JOIN app_assignments aa ON a.id = aa.app_id 
+          LEFT JOIN app_metrics m ON m.app_id = a.id 
+            AND m.recorded_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+          WHERE aa.team_id IN (${placeholders})
+          GROUP BY a.id, aa.team_id
+          ORDER BY a.pm2_name`,
           teamIds
         );
       }

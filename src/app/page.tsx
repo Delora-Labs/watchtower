@@ -43,6 +43,8 @@ interface App {
   status: string;
   cpu_percent: number;
   memory_mb: number;
+  avg_cpu_5min: number;
+  avg_memory_5min: number;
   uptime_ms: number;
   restarts: number;
   last_seen: string;
@@ -265,13 +267,15 @@ function BottomSheet({
           
           {/* Stats Row */}
           <div className="mt-3 flex items-center gap-4 text-sm">
-            <div className="flex items-center gap-1.5 text-gray-400">
+            <div className="flex items-center gap-1.5 text-gray-400" title={`Instant: ${app.cpu_percent}%`}>
               <Cpu className="w-4 h-4" />
-              <span>{app.cpu_percent}%</span>
+              <span>{Math.round(app.avg_cpu_5min ?? app.cpu_percent)}%</span>
+              <span className="text-xs text-gray-500">avg</span>
             </div>
-            <div className="flex items-center gap-1.5 text-gray-400">
+            <div className="flex items-center gap-1.5 text-gray-400" title={`Instant: ${formatBytes(app.memory_mb)}`}>
               <HardDrive className="w-4 h-4" />
-              <span>{formatBytes(app.memory_mb)}</span>
+              <span>{formatBytes(Math.round(app.avg_memory_5min ?? app.memory_mb))}</span>
+              <span className="text-xs text-gray-500">avg</span>
             </div>
             <div className="flex items-center gap-1.5 text-gray-400">
               <Clock className="w-4 h-4" />
@@ -484,13 +488,13 @@ function AppRow({
               
               {/* Mobile stats row */}
               <div className="mt-1.5 flex items-center gap-3 text-xs text-gray-400 flex-wrap">
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1" title={`Instant: ${app.cpu_percent}%`}>
                   <Cpu className="w-3 h-3" />
-                  {app.cpu_percent}%
+                  {Math.round(app.avg_cpu_5min ?? app.cpu_percent)}%
                 </span>
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1" title={`Instant: ${formatBytes(app.memory_mb)}`}>
                   <HardDrive className="w-3 h-3" />
-                  {formatBytes(app.memory_mb)}
+                  {formatBytes(Math.round(app.avg_memory_5min ?? app.memory_mb))}
                 </span>
                 <span>{formatUptime(app.uptime_ms)}</span>
                 <span className="text-gray-500">↻{app.restarts}</span>
@@ -554,16 +558,16 @@ function AppRow({
           </div>
 
           <div className="flex items-center gap-6">
-            <div className="text-right text-sm">
+            <div className="text-right text-sm" title={`5min avg (instant: ${app.cpu_percent}%)`}>
               <div className="flex items-center gap-1 text-gray-400">
                 <Cpu className="w-3 h-3" />
-                {app.cpu_percent}%
+                {Math.round(app.avg_cpu_5min ?? app.cpu_percent)}%
               </div>
             </div>
-            <div className="text-right text-sm">
+            <div className="text-right text-sm" title={`5min avg (instant: ${formatBytes(app.memory_mb)})`}>
               <div className="flex items-center gap-1 text-gray-400">
                 <HardDrive className="w-3 h-3" />
-                {formatBytes(app.memory_mb)}
+                {formatBytes(Math.round(app.avg_memory_5min ?? app.memory_mb))}
               </div>
             </div>
             <div className="text-right text-sm w-20">

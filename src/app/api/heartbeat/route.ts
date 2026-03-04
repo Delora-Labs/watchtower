@@ -117,14 +117,30 @@ export async function POST(request: NextRequest) {
            WHERE id = ?`,
           [app.pm2_id, app.status, cpuPct, memMb, uptimeMs, app.restarts, existingApp.id]
         );
+        
+        // Record app metrics for averaging
+        await execute(
+          `INSERT INTO app_metrics (app_id, cpu_percent, memory_mb) VALUES (?, ?, ?)`,
+          [existingApp.id, cpuPct, memMb]
+        );
       } else {
+        const newAppId = generateId();
         await execute(
           `INSERT INTO apps (id, server_id, pm2_id, pm2_name, status, cpu_percent, memory_mb, uptime_ms, restarts, last_seen)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-          [generateId(), server.id, app.pm2_id, app.name, app.status, cpuPct, memMb, uptimeMs, app.restarts]
+          [newAppId, server.id, app.pm2_id, app.name, app.status, cpuPct, memMb, uptimeMs, app.restarts]
+        );
+        
+        // Record app metrics for averaging (for new app too)
+        await execute(
+          `INSERT INTO app_metrics (app_id, cpu_percent, memory_mb) VALUES (?, ?, ?)`,
+          [newAppId, cpuPct, memMb]
         );
       }
     }
+    
+    // Cleanup old app metrics (older than 1 hour)
+    await execute(`DELETE FROM app_metrics WHERE recorded_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)`);
     
     // Check for other servers that may be offline
     await checkServerOffline();
