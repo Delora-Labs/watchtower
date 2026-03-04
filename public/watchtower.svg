@@ -1,0 +1,16 @@
+<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Tower base -->
+  <path d="M20 58 L24 28 L40 28 L44 58 Z" fill="#1E3A5F" stroke="#60A5FA" stroke-width="2"/>
+  <!-- Tower middle section -->
+  <rect x="22" y="28" width="20" height="8" fill="#1E3A5F" stroke="#60A5FA" stroke-width="1.5"/>
+  <!-- Tower top/lamp house -->
+  <rect x="24" y="16" width="16" height="12" rx="2" fill="#1E3A5F" stroke="#60A5FA" stroke-width="2"/>
+  <!-- Lamp dome -->
+  <path d="M26 16 Q32 8 38 16" fill="none" stroke="#60A5FA" stroke-width="2" stroke-linecap="round"/>
+  <!-- Light glow -->
+  <circle cx="32" cy="20" r="6" fill="#FCD34D" opacity="0.8"/>
+  <circle cx="32" cy="20" r="4" fill="#FCD34D"/>
+  <!-- Windows -->
+  <rect x="29" y="34" width="6" height="8" rx="1" fill="#0F172A" stroke="#60A5FA" stroke-width="1"/>
+  <rect x="29" y="46" width="6" height="8" rx="1" fill="#0F172A" stroke="#60A5FA" stroke-width="1"/>
+</svg>

@@ -18,7 +18,8 @@ export async function query<T = RowDataPacket>(
   sql: string,
   params?: QueryParams
 ): Promise<T[]> {
-  const [rows] = await pool.execute<RowDataPacket[]>(sql, params || []);
+  // Use query() instead of execute() to avoid prepared statement issues
+  const [rows] = await pool.query<RowDataPacket[]>(sql, params || []);
   return rows as T[];
 }
 
@@ -34,7 +35,8 @@ export async function execute(
   sql: string,
   params?: QueryParams
 ): Promise<ResultSetHeader> {
-  const [result] = await pool.execute<ResultSetHeader>(sql, params || []);
+  // Use query() instead of execute() to avoid prepared statement issues
+  const [result] = await pool.query<ResultSetHeader>(sql, params || []);
   return result;
 }
 

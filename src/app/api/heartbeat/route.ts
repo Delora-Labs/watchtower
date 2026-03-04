@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne, execute } from "@/lib/db";
 import { generateId } from "@/lib/utils";
+import { processAlerts, checkServerOffline } from "@/lib/alerts";
 
 interface AppReport {
   pm2_id: number;
   name: string;
   status: string;
-  cpu: number;
-  memory: number;
-  uptime: number;
+  cpu_percent?: number;
+  cpu?: number;
+  memory_mb?: number;
+  memory?: number;
+  uptime_ms?: number;
+  uptime?: number;
   restarts: number;
 }
 
@@ -16,7 +20,15 @@ interface HeartbeatPayload {
   hostname: string;
   os: string;
   ip?: string;
-  system: {
+  // Go agent format
+  metrics?: {
+    cpu_percent: number;
+    memory_used_mb: number;
+    memory_total_mb: number;
+    disk_used_percent: number;
+  };
+  // Old format
+  system?: {
     cpu: number;
     memoryUsed: number;
     memoryTotal: number;
@@ -32,13 +44,20 @@ interface Server {
 
 export async function POST(request: NextRequest) {
   try {
-    // Validate API key
+    // Validate API key (support both Bearer token and X-API-Key)
     const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
+    const xApiKey = request.headers.get("x-api-key");
+    
+    let apiKey: string | null = null;
+    if (authHeader?.startsWith("Bearer ")) {
+      apiKey = authHeader.slice(7);
+    } else if (xApiKey) {
+      apiKey = xApiKey;
+    }
+    
+    if (!apiKey) {
       return NextResponse.json({ error: "Missing API key" }, { status: 401 });
     }
-
-    const apiKey = authHeader.slice(7);
     const server = await queryOne<Server>(
       "SELECT id, name FROM servers WHERE api_key = ?",
       [apiKey]
@@ -50,6 +69,13 @@ export async function POST(request: NextRequest) {
 
     const body: HeartbeatPayload = await request.json();
 
+    // Normalize metrics from either format
+    const metrics = body.metrics || body.system;
+    const cpu = body.metrics?.cpu_percent ?? body.system?.cpu ?? 0;
+    const memUsed = body.metrics?.memory_used_mb ?? body.system?.memoryUsed ?? 0;
+    const memTotal = body.metrics?.memory_total_mb ?? body.system?.memoryTotal ?? 0;
+    const diskUsed = body.metrics?.disk_used_percent ?? body.system?.diskUsed ?? 0;
+
     // Update server info
     await execute(
       `UPDATE servers SET 
@@ -60,14 +86,24 @@ export async function POST(request: NextRequest) {
     );
 
     // Record metrics
-    await execute(
-      `INSERT INTO server_metrics (server_id, cpu_percent, memory_used_mb, memory_total_mb, disk_used_percent)
-       VALUES (?, ?, ?, ?, ?)`,
-      [server.id, body.system.cpu, body.system.memoryUsed, body.system.memoryTotal, body.system.diskUsed]
-    );
+    if (metrics) {
+      await execute(
+        `INSERT INTO server_metrics (server_id, cpu_percent, memory_used_mb, memory_total_mb, disk_used_percent)
+         VALUES (?, ?, ?, ?, ?)`,
+        [server.id, cpu, memUsed, memTotal, diskUsed]
+      );
+    }
+
+    // Process alerts before updating (to detect status changes)
+    await processAlerts(server.id, server.name, body.apps);
 
     // Update apps
     for (const app of body.apps) {
+      // Normalize values from either format
+      const cpuPct = app.cpu_percent ?? app.cpu ?? 0;
+      const memMb = app.memory_mb ?? app.memory ?? 0;
+      const uptimeMs = app.uptime_ms ?? app.uptime ?? 0;
+      
       const existingApp = await queryOne<{ id: string }>(
         "SELECT id FROM apps WHERE server_id = ? AND pm2_name = ?",
         [server.id, app.name]
@@ -79,16 +115,19 @@ export async function POST(request: NextRequest) {
             pm2_id = ?, status = ?, cpu_percent = ?, memory_mb = ?,
             uptime_ms = ?, restarts = ?, last_seen = NOW()
            WHERE id = ?`,
-          [app.pm2_id, app.status, app.cpu, app.memory, app.uptime, app.restarts, existingApp.id]
+          [app.pm2_id, app.status, cpuPct, memMb, uptimeMs, app.restarts, existingApp.id]
         );
       } else {
         await execute(
           `INSERT INTO apps (id, server_id, pm2_id, pm2_name, status, cpu_percent, memory_mb, uptime_ms, restarts, last_seen)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-          [generateId(), server.id, app.pm2_id, app.name, app.status, app.cpu, app.memory, app.uptime, app.restarts]
+          [generateId(), server.id, app.pm2_id, app.name, app.status, cpuPct, memMb, uptimeMs, app.restarts]
         );
       }
     }
+    
+    // Check for other servers that may be offline
+    await checkServerOffline();
 
     // Mark apps not in this heartbeat as offline
     const appNames = body.apps.map(a => a.name);

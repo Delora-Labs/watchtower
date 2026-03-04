@@ -7,6 +7,11 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Watchtower - Server Monitoring",
   description: "Lightweight server and app monitoring dashboard",
+  icons: {
+    icon: "/watchtower.svg",
+    shortcut: "/watchtower.svg",
+    apple: "/watchtower.svg",
+  },
 };
 
 export default function RootLayout({
