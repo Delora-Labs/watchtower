@@ -45,26 +45,53 @@ export function WatchtowerIcon({ className = "w-8 h-8" }: { className?: string }
 
 export function WatchtowerBeacon({ className = "" }: { className?: string }) {
   return (
-    <div className={`relative ${className}`}>
-      {/* Rotating light beams - 200% bigger */}
-      <div className="absolute inset-0 animate-beacon-rotate">
-        {/* Primary beam */}
-        <div className="absolute top-1/2 left-1/2 w-48 h-3 -translate-y-1/2 origin-left">
-          <div className="w-full h-full bg-gradient-to-r from-yellow-400/80 via-yellow-400/40 to-transparent rounded-full blur-sm" />
-        </div>
-        {/* Opposite beam */}
-        <div className="absolute top-1/2 left-1/2 w-48 h-3 -translate-y-1/2 origin-left rotate-180">
-          <div className="w-full h-full bg-gradient-to-r from-yellow-400/80 via-yellow-400/40 to-transparent rounded-full blur-sm" />
-        </div>
+    <div className={`relative ${className}`} style={{ perspective: '500px' }}>
+      {/* 3D Light beam - horizontal sweep POV */}
+      <div 
+        className="absolute inset-0 animate-beacon-sweep"
+        style={{ transformStyle: 'preserve-3d' }}
+      >
+        {/* Main beam cone */}
+        <div 
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 origin-center"
+          style={{
+            width: '300px',
+            height: '80px',
+            marginTop: '-70px',
+            background: 'linear-gradient(180deg, rgba(252,211,77,0.9) 0%, rgba(252,211,77,0.4) 40%, transparent 100%)',
+            clipPath: 'polygon(40% 0%, 60% 0%, 100% 100%, 0% 100%)',
+            filter: 'blur(4px)',
+          }}
+        />
+        {/* Bright center of beam */}
+        <div 
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 animate-beacon-intensity"
+          style={{
+            width: '150px',
+            height: '60px',
+            marginTop: '-65px',
+            background: 'linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(252,211,77,0.6) 50%, transparent 100%)',
+            clipPath: 'polygon(45% 0%, 55% 0%, 85% 100%, 15% 100%)',
+          }}
+        />
       </div>
+
+      {/* Light source flare */}
+      <div 
+        className="absolute top-1/2 left-1/2 w-16 h-16 rounded-full animate-beacon-flare"
+        style={{
+          marginTop: '-40px',
+          background: 'radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(252,211,77,0.8) 30%, transparent 70%)',
+        }}
+      />
       
-      {/* Center tower icon - 200% bigger */}
+      {/* Center tower icon */}
       <div className="relative z-10">
         <WatchtowerIcon className="w-24 h-24" />
       </div>
       
-      {/* Pulsing glow - 200% bigger */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-yellow-400/50 rounded-full blur-lg animate-beacon-glow" />
+      {/* Ambient glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-yellow-400/30 rounded-full blur-xl" />
     </div>
   );
 }

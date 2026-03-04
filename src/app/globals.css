@@ -72,6 +72,52 @@ body {
   }
 }
 
+/* 3D Lighthouse sweep - horizontal POV */
+@keyframes beacon-sweep-3d {
+  0% {
+    transform: rotateY(-80deg);
+    opacity: 0.1;
+  }
+  25% {
+    transform: rotateY(-40deg);
+    opacity: 0.4;
+  }
+  50% {
+    transform: rotateY(0deg);
+    opacity: 1;
+  }
+  75% {
+    transform: rotateY(40deg);
+    opacity: 0.4;
+  }
+  100% {
+    transform: rotateY(80deg);
+    opacity: 0.1;
+  }
+}
+
+@keyframes beacon-light-intensity {
+  0%, 100% {
+    opacity: 0.2;
+    filter: blur(8px);
+  }
+  45%, 55% {
+    opacity: 1;
+    filter: blur(2px);
+  }
+}
+
+@keyframes beacon-flare {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(0.5);
+    opacity: 0;
+  }
+  45%, 55% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 1;
+  }
+}
+
 .animate-beacon-rotate {
   animation: beacon-rotate 8s linear infinite;
 }
@@ -82,4 +128,17 @@ body {
 
 .animate-beacon-pulse {
   animation: beacon-pulse 2s ease-in-out infinite;
+}
+
+.animate-beacon-sweep {
+  animation: beacon-sweep-3d 4s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+
+.animate-beacon-intensity {
+  animation: beacon-light-intensity 4s ease-in-out infinite;
+}
+
+.animate-beacon-flare {
+  animation: beacon-flare 4s ease-in-out infinite;
 }
