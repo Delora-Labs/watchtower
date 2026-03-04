@@ -897,7 +897,7 @@ export default function Dashboard() {
             <WatchtowerIcon className="w-9 h-9 md:w-10 md:h-10 flex-shrink-0" />
             <div>
               <h1 className="text-lg md:text-xl font-bold">Watchtower</h1>
-              <p className="text-xs text-gray-400 hidden sm:block">Server Monitoring</p>
+              <p className="text-xs text-gray-400 hidden sm:block">Delora Labs Monitoring System</p>
             </div>
           </div>
           

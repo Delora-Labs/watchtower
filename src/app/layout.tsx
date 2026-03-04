@@ -5,7 +5,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Watchtower - Server Monitoring",
+  title: "Watchtower - Delora Labs Monitoring System",
   description: "Lightweight server and app monitoring dashboard",
   icons: {
     icon: "/watchtower.svg",
