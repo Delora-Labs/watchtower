@@ -44,65 +44,86 @@ export function WatchtowerIcon({ className = "w-8 h-8" }: { className?: string }
 }
 
 export function WatchtowerBeacon({ className = "" }: { className?: string }) {
+  // Icon is 64x64 viewBox rendered at 96x96
+  // Light center in SVG: cx=32, cy=20
+  // At 96px: x=48px (center), y=30px from top
+  
   return (
-    <div className={`relative ${className}`} style={{ perspective: '500px', width: '96px', height: '96px' }}>
-      {/* Center tower icon - positioned first for reference */}
+    <div 
+      className={`relative ${className}`} 
+      style={{ 
+        width: '96px', 
+        height: '96px',
+        perspective: '400px',
+      }}
+    >
+      {/* Tower icon (z-index 10 to be on top) */}
       <div className="absolute inset-0 z-10">
         <WatchtowerIcon className="w-24 h-24" />
       </div>
 
-      {/* 3D Light beam - aligned with lamp (top 30% of icon) */}
+      {/* 3D Beam container - positioned at lamp location */}
+      {/* Lamp is at y=30px from top, centered horizontally */}
       <div 
-        className="absolute animate-beacon-sweep"
+        className="absolute"
         style={{ 
-          transformStyle: 'preserve-3d',
-          top: '30px',  /* Align with lamp position on icon */
-          left: '48px', /* Center horizontally */
-          transformOrigin: 'center center',
+          top: '30px',
+          left: '48px',
+          width: '0px',
+          height: '0px',
         }}
       >
-        {/* Main beam cone - pointing upward from lamp */}
+        {/* Sweeping beam - rotates around Y axis for 3D effect */}
         <div 
-          className="origin-bottom"
-          style={{
-            width: '200px',
-            height: '60px',
-            marginLeft: '-100px',
-            marginTop: '-60px',
-            background: 'linear-gradient(0deg, rgba(252,211,77,0.9) 0%, rgba(252,211,77,0.4) 50%, transparent 100%)',
-            clipPath: 'polygon(35% 100%, 65% 100%, 100% 0%, 0% 0%)',
-            filter: 'blur(3px)',
+          className="animate-beacon-sweep"
+          style={{ 
+            transformStyle: 'preserve-3d',
+            transformOrigin: '0 0',
           }}
-        />
-        {/* Bright center of beam */}
-        <div 
-          className="absolute animate-beacon-intensity origin-bottom"
-          style={{
-            width: '120px',
-            height: '50px',
-            left: '-60px',
-            top: '-50px',
-            background: 'linear-gradient(0deg, rgba(255,255,255,1) 0%, rgba(252,211,77,0.5) 60%, transparent 100%)',
-            clipPath: 'polygon(40% 100%, 60% 100%, 90% 0%, 10% 0%)',
-          }}
-        />
+        >
+          {/* Left beam */}
+          <div 
+            style={{
+              position: 'absolute',
+              width: '150px',
+              height: '8px',
+              left: '0',
+              top: '-4px',
+              background: 'linear-gradient(90deg, rgba(252,211,77,0.9) 0%, rgba(252,211,77,0.3) 60%, transparent 100%)',
+              borderRadius: '4px',
+              filter: 'blur(2px)',
+            }}
+          />
+          {/* Right beam (opposite direction) */}
+          <div 
+            style={{
+              position: 'absolute',
+              width: '150px',
+              height: '8px',
+              right: '0',
+              top: '-4px',
+              transform: 'rotate(180deg)',
+              transformOrigin: '0 50%',
+              background: 'linear-gradient(90deg, rgba(252,211,77,0.9) 0%, rgba(252,211,77,0.3) 60%, transparent 100%)',
+              borderRadius: '4px',
+              filter: 'blur(2px)',
+            }}
+          />
+        </div>
       </div>
 
-      {/* Light source flare - at lamp position */}
+      {/* Pulsing glow at lamp - exactly at light position */}
       <div 
-        className="absolute w-10 h-10 rounded-full animate-beacon-flare"
+        className="absolute animate-beacon-flare z-20"
         style={{
-          top: '22px',
-          left: '50%',
-          marginLeft: '-20px',
-          background: 'radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(252,211,77,0.8) 40%, transparent 70%)',
+          top: '24px',
+          left: '42px',
+          width: '12px',
+          height: '12px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(252,211,77,0.9) 50%, transparent 100%)',
+          boxShadow: '0 0 20px 8px rgba(252,211,77,0.6)',
         }}
-      />
-      
-      {/* Ambient glow at lamp */}
-      <div 
-        className="absolute w-8 h-8 bg-yellow-400/40 rounded-full blur-lg"
-        style={{ top: '24px', left: '50%', marginLeft: '-16px' }}
       />
     </div>
   );
