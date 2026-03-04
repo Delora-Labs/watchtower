@@ -45,33 +45,66 @@ export function WatchtowerIcon({ className = "w-8 h-8" }: { className?: string }
 
 export function WatchtowerBeacon({ className = "" }: { className?: string }) {
   return (
-    <div className={`relative ${className}`}>
-      {/* Spinning light beams - large and dramatic */}
-      <div className="absolute inset-0 animate-spin-slow">
-        <div className="absolute top-1/2 left-1/2 w-80 h-2 -translate-x-1/2 -translate-y-1/2 origin-left">
-          <div className="w-full h-full bg-gradient-to-r from-yellow-400/70 via-yellow-400/30 to-transparent rounded-full blur-md" />
-        </div>
-        <div className="absolute top-1/2 left-1/2 w-80 h-2 -translate-x-1/2 -translate-y-1/2 origin-left rotate-180">
-          <div className="w-full h-full bg-gradient-to-r from-yellow-400/70 via-yellow-400/30 to-transparent rounded-full blur-md" />
-        </div>
+    <div className={`relative ${className}`} style={{ width: '200px', height: '200px' }}>
+      {/* Ambient glow behind everything */}
+      <div className="absolute top-1/2 left-1/2 w-32 h-32 -translate-x-1/2 -translate-y-1/2 bg-yellow-500/20 rounded-full blur-3xl" />
+      
+      {/* Main rotating light beam - cone shaped */}
+      <div className="absolute inset-0 animate-beacon-rotate" style={{ transformOrigin: '50% 50%' }}>
+        {/* Primary beam - wide cone */}
+        <div 
+          className="absolute top-1/2 left-1/2 origin-left"
+          style={{ 
+            width: '180px',
+            height: '60px',
+            marginTop: '-30px',
+            background: 'linear-gradient(90deg, rgba(252,211,77,0.8) 0%, rgba(252,211,77,0.4) 20%, rgba(252,211,77,0.1) 60%, transparent 100%)',
+            clipPath: 'polygon(0% 40%, 100% 0%, 100% 100%, 0% 60%)',
+            filter: 'blur(8px)',
+          }}
+        />
+        {/* Bright core of beam */}
+        <div 
+          className="absolute top-1/2 left-1/2 origin-left"
+          style={{ 
+            width: '160px',
+            height: '20px',
+            marginTop: '-10px',
+            background: 'linear-gradient(90deg, rgba(255,255,255,0.9) 0%, rgba(252,211,77,0.6) 30%, transparent 100%)',
+            filter: 'blur(4px)',
+          }}
+        />
       </div>
-      {/* Secondary dimmer beams for depth */}
-      <div className="absolute inset-0 animate-spin-slow" style={{ animationDelay: '-2s' }}>
-        <div className="absolute top-1/2 left-1/2 w-64 h-1 -translate-x-1/2 -translate-y-1/2 origin-left rotate-45">
-          <div className="w-full h-full bg-gradient-to-r from-yellow-300/40 via-yellow-300/10 to-transparent rounded-full blur-sm" />
-        </div>
-        <div className="absolute top-1/2 left-1/2 w-64 h-1 -translate-x-1/2 -translate-y-1/2 origin-left -rotate-135">
-          <div className="w-full h-full bg-gradient-to-r from-yellow-300/40 via-yellow-300/10 to-transparent rounded-full blur-sm" />
-        </div>
+      
+      {/* Opposite beam (dimmer) */}
+      <div className="absolute inset-0 animate-beacon-rotate" style={{ transformOrigin: '50% 50%' }}>
+        <div 
+          className="absolute top-1/2 left-1/2 origin-left rotate-180"
+          style={{ 
+            width: '140px',
+            height: '40px',
+            marginTop: '-20px',
+            background: 'linear-gradient(90deg, rgba(252,211,77,0.5) 0%, rgba(252,211,77,0.2) 30%, transparent 100%)',
+            clipPath: 'polygon(0% 35%, 100% 0%, 100% 100%, 0% 65%)',
+            filter: 'blur(6px)',
+          }}
+        />
       </div>
-      {/* Center tower icon - bigger */}
-      <div className="relative z-10">
-        <WatchtowerIcon className="w-24 h-24" />
+
+      {/* Center tower icon */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+        <WatchtowerIcon className="w-20 h-20" />
       </div>
-      {/* Main glow effect - larger and brighter */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-yellow-400/40 rounded-full blur-xl animate-pulse" />
-      {/* Inner glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-yellow-300/60 rounded-full blur-md animate-pulse" />
+      
+      {/* Pulsing glow at light source */}
+      <div 
+        className="absolute top-1/2 left-1/2 w-12 h-12 rounded-full animate-beacon-pulse"
+        style={{ 
+          marginTop: '-38px',
+          marginLeft: '-24px',
+          background: 'radial-gradient(circle, rgba(252,211,77,0.9) 0%, rgba(252,211,77,0.4) 50%, transparent 70%)',
+        }}
+      />
     </div>
   );
 }
