@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query, queryOne } from "@/lib/db";
+import { query, queryOne, execute } from "@/lib/db";
+import { generateId } from "@/lib/utils";
 
 interface HealthCheckResult {
   id: number;
@@ -85,6 +86,47 @@ export async function GET(
     });
   } catch (error) {
     console.error("Get health check results error:", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
+
+// POST new health check result (called by agent)
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const { status, response_time_ms, status_code, error_message } = body;
+
+    // Verify health check exists
+    const healthCheck = await queryOne<HealthCheck>(
+      "SELECT id, name FROM health_checks WHERE id = ?",
+      [id]
+    );
+
+    if (!healthCheck) {
+      return NextResponse.json(
+        { error: "Health check not found" },
+        { status: 404 }
+      );
+    }
+
+    // Map agent status to DB status
+    const dbStatus = status === "healthy" ? "up" : status === "timeout" ? "down" : "down";
+
+    // Insert result
+    const resultId = generateId();
+    await execute(
+      `INSERT INTO health_check_results (id, health_check_id, status, response_time_ms, status_code, error_message)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [resultId, id, dbStatus, response_time_ms || null, status_code || null, error_message || null]
+    );
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Post health check result error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

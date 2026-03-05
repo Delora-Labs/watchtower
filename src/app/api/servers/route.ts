@@ -16,6 +16,7 @@ export async function GET() {
       ip_address: string;
       last_heartbeat: Date;
       is_online: boolean;
+      run_health_check: boolean;
     }>("SELECT * FROM servers ORDER BY name");
 
     interface AppRow {
@@ -111,9 +112,19 @@ export async function GET() {
   }
 }
 
-// POST create new server
+// POST create new server (team_lead+ only)
 export async function POST(request: NextRequest) {
   try {
+    const user = await getUserFromSession();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    
+    // Only system_admin and team_lead can add servers
+    if (user.role !== "system_admin" && user.role !== "team_lead") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    
     const body = await request.json();
     const { name } = body;
 
@@ -121,12 +132,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
 
+    // Get the user's team (for auto-assigning apps)
+    const teamIds = await getUserTeamIds(user.id);
+    const defaultTeamId = teamIds.length > 0 ? teamIds[0] : null;
+
     const id = generateId();
     const apiKey = generateApiKey();
 
     await execute(
-      "INSERT INTO servers (id, name, api_key) VALUES (?, ?, ?)",
-      [id, name, apiKey]
+      "INSERT INTO servers (id, name, api_key, default_team_id) VALUES (?, ?, ?, ?)",
+      [id, name, apiKey, defaultTeamId]
     );
 
     return NextResponse.json({

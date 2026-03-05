@@ -156,7 +156,10 @@ export function MemoryChart({ data, range }: ChartProps) {
   }, [range]);
 
   const maxMemory = useMemo(() => {
-    const max = Math.max(...data.map(d => d.memoryTotal));
+    if (!data || data.length === 0) return 100;
+    const totals = data.map(d => d.memoryTotal).filter(v => typeof v === 'number' && !isNaN(v));
+    if (totals.length === 0) return 100;
+    const max = Math.max(...totals);
     return max > 0 ? max * 1.1 : 100;
   }, [data]);
 

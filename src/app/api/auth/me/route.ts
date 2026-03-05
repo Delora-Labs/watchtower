@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import { getUserFromSession } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getUserFromSession, getUserTeamIds } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await getUserFromSession();
 
@@ -12,6 +12,14 @@ export async function GET() {
       );
     }
 
+    const { searchParams } = new URL(request.url);
+    const includeTeams = searchParams.get("includeTeams") === "true";
+
+    let teamIds: string[] = [];
+    if (includeTeams) {
+      teamIds = await getUserTeamIds(user.id);
+    }
+
     return NextResponse.json({
       user: {
         id: user.id,
@@ -19,6 +27,7 @@ export async function GET() {
         name: user.name,
         role: user.role,
       },
+      teamIds,
     });
   } catch (error) {
     console.error("Auth check error:", error);

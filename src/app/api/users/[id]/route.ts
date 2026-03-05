@@ -42,7 +42,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, role, is_active } = body;
+    const { name, role, is_active, teamId } = body;
 
     const user = await queryOne<User>(
       "SELECT * FROM users WHERE id = ?",
@@ -61,6 +61,21 @@ export async function PATCH(
        WHERE id = ?`,
       [name, role, is_active, id]
     );
+
+    // Update team membership if teamId is provided (even if empty string to remove)
+    if (teamId !== undefined) {
+      // Remove all existing team memberships
+      await execute("DELETE FROM team_members WHERE user_id = ?", [id]);
+      
+      // Add new team membership if teamId is not empty
+      if (teamId) {
+        const teamRole = role === "team_lead" ? "lead" : "member";
+        await execute(
+          "INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, ?)",
+          [teamId, id, teamRole]
+        );
+      }
+    }
 
     const updated = await queryOne<User>(
       "SELECT id, email, name, role, is_active, created_at, updated_at FROM users WHERE id = ?",

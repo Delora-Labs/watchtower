@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { execute, queryOne, query } from "@/lib/db";
+import { getUserFromSession } from "@/lib/auth";
 
 interface App {
   id: string;
@@ -143,6 +144,41 @@ export async function PATCH(
     });
   } catch (error) {
     console.error("Update app error:", error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
+
+// DELETE app (team_lead+ only)
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getUserFromSession();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    
+    if (user.role !== "system_admin" && user.role !== "team_lead") {
+      return NextResponse.json({ error: "Only admins and team leads can delete apps" }, { status: 403 });
+    }
+
+    const { id } = await params;
+    
+    // Delete related records first
+    await execute("DELETE FROM app_assignments WHERE app_id = ?", [id]);
+    await execute("DELETE FROM app_metrics WHERE app_id = ?", [id]);
+    
+    // Delete the app
+    const result = await execute("DELETE FROM apps WHERE id = ?", [id]);
+    
+    if (result.affectedRows === 0) {
+      return NextResponse.json({ error: "App not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, message: "App deleted" });
+  } catch (error) {
+    console.error("Delete app error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

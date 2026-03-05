@@ -39,18 +39,9 @@ export async function GET(
 
     const since = new Date(Date.now() - hours * 60 * 60 * 1000);
 
-    // Determine aggregation based on range
-    // For larger ranges, sample fewer points to keep chart performant
-    let intervalMinutes: number;
-    if (hours <= 1) {
-      intervalMinutes = 1; // Every 30 sec sample for 1h
-    } else if (hours <= 6) {
-      intervalMinutes = 2; // Every 2 min for 6h
-    } else if (hours <= 24) {
-      intervalMinutes = 5; // Every 5 min for 24h
-    } else {
-      intervalMinutes = 30; // Every 30 min for 7d
-    }
+    // Consistent 1-minute aggregation for all ranges
+    // More data = more points (longer ranges show more history)
+    const intervalMinutes = 1;
 
     // Get aggregated metrics
     const metrics = await query<MetricRow>(
@@ -79,13 +70,13 @@ export async function GET(
     );
 
     // Get summary stats
-    const stats = await query<{
-      avg_cpu: number;
-      max_cpu: number;
-      avg_memory: number;
-      max_memory: number;
-      avg_disk: number;
-      max_disk: number;
+    const statsRaw = await query<{
+      avg_cpu: string | number;
+      max_cpu: string | number;
+      avg_memory: string | number;
+      max_memory: string | number;
+      avg_disk: string | number;
+      max_disk: string | number;
     }>(
       `SELECT 
         AVG(cpu_percent) as avg_cpu,
@@ -98,6 +89,16 @@ export async function GET(
       WHERE server_id = ? AND recorded_at >= ?`,
       [id, since]
     );
+    
+    // Convert string values to numbers (MySQL returns decimals as strings)
+    const stats = statsRaw.map(s => ({
+      avg_cpu: parseFloat(String(s.avg_cpu)) || 0,
+      max_cpu: parseFloat(String(s.max_cpu)) || 0,
+      avg_memory: parseFloat(String(s.avg_memory)) || 0,
+      max_memory: parseFloat(String(s.max_memory)) || 0,
+      avg_disk: parseFloat(String(s.avg_disk)) || 0,
+      max_disk: parseFloat(String(s.max_disk)) || 0,
+    }));
 
     // Format data for charts
     const chartData = metrics.map((m) => ({

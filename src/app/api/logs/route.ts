@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(parseInt(searchParams.get("limit") || "100"), 500);
   const before = searchParams.get("before");
   const after = searchParams.get("after");
+  const beforeId = searchParams.get("before_id");
 
   const conditions: string[] = [];
   const params: (string | number)[] = [];
@@ -55,6 +56,11 @@ export async function GET(request: NextRequest) {
   if (after) {
     conditions.push("l.timestamp > ?");
     params.push(after);
+  }
+
+  if (beforeId) {
+    conditions.push("l.id < ?");
+    params.push(parseInt(beforeId));
   }
 
   const whereClause =
@@ -90,7 +96,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/logs - Push logs (for agents)
+// POST /api/logs - Push logs (for agents) with deduplication
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -112,27 +118,61 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Check for existing hashes to deduplicate
+    const hashes = logs
+      .filter((log) => log.hash)
+      .map((log) => log.hash as string);
+
+    let existingHashes = new Set<string>();
+
+    if (hashes.length > 0) {
+      const placeholders = hashes.map(() => "?").join(", ");
+      const existing = await query<{ hash: string }>(
+        `SELECT hash FROM app_logs WHERE hash IN (${placeholders}) AND timestamp > DATE_SUB(NOW(), INTERVAL 5 MINUTE)`,
+        hashes
+      );
+      existingHashes = new Set(existing.map((r) => r.hash));
+    }
+
+    // Filter out duplicates
+    const newLogs = logs.filter((log) => {
+      if (!log.hash) return true; // No hash = always insert
+      return !existingHashes.has(log.hash);
+    });
+
+    const skipped = logs.length - newLogs.length;
+
+    if (newLogs.length === 0) {
+      return NextResponse.json({
+        success: true,
+        inserted: 0,
+        skipped,
+      });
+    }
+
     // Insert logs in batch
-    const values = logs.map((log) => [
+    const values = newLogs.map((log) => [
       log.server_id,
       log.app_id || null,
       log.app_name || null,
       log.level || "info",
       log.message || "",
       log.timestamp ? new Date(log.timestamp) : new Date(),
+      log.hash || null,
     ]);
 
-    const placeholders = values.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
+    const placeholders = values.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(", ");
     const flatValues = values.flat();
 
     const result = await execute(
-      `INSERT INTO app_logs (server_id, app_id, app_name, level, message, timestamp) VALUES ${placeholders}`,
+      `INSERT INTO app_logs (server_id, app_id, app_name, level, message, timestamp, hash) VALUES ${placeholders}`,
       flatValues
     );
 
     return NextResponse.json({
       success: true,
       inserted: result.affectedRows,
+      skipped,
     });
   } catch (error) {
     console.error("Failed to insert logs:", error);

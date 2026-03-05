@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, execute } from "@/lib/db";
 import { generateId } from "@/lib/utils";
+import { hashPassword, getUserFromSession, canViewAllApps, getUserTeamIds } from "@/lib/auth";
 import crypto from "crypto";
 
 interface User {
@@ -11,21 +12,40 @@ interface User {
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
+  team_ids?: string[];
 }
 
-// Simple password hashing (in production, use bcrypt)
-function hashPassword(password: string): string {
-  return crypto.createHash("sha256").update(password).digest("hex");
-}
-
-// GET all users
+// GET all users (filtered by team for non-admins)
 export async function GET() {
   try {
-    const users = await query<User>(
-      "SELECT id, email, name, role, is_active, created_at, updated_at FROM users ORDER BY name, email"
+    const currentUser = await getUserFromSession();
+    
+    // Get all users with their team memberships
+    const users = await query<User & { team_id: string | null }>(
+      `SELECT u.id, u.email, u.name, u.role, u.is_active, u.created_at, u.updated_at,
+              GROUP_CONCAT(tm.team_id) as team_ids
+       FROM users u
+       LEFT JOIN team_members tm ON u.id = tm.user_id
+       GROUP BY u.id
+       ORDER BY u.name, u.email`
     );
 
-    return NextResponse.json({ data: users });
+    // Transform team_ids from comma-separated string to array
+    const usersWithTeams = users.map(u => ({
+      ...u,
+      team_ids: u.team_ids ? String(u.team_ids).split(",") : [],
+    }));
+
+    // Filter users by team for non-admins
+    if (currentUser && !canViewAllApps(currentUser.role)) {
+      const myTeamIds = await getUserTeamIds(currentUser.id);
+      const filteredUsers = usersWithTeams.filter(u => 
+        u.team_ids.some(tid => myTeamIds.includes(tid)) || u.id === currentUser.id
+      );
+      return NextResponse.json({ data: filteredUsers });
+    }
+
+    return NextResponse.json({ data: usersWithTeams });
   } catch (error) {
     console.error("Get users error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
@@ -36,7 +56,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, name, role = "user" } = body;
+    const { email, name, role = "user", teamId } = body;
 
     if (!email) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
@@ -53,14 +73,23 @@ export async function POST(request: NextRequest) {
     }
 
     const id = generateId();
-    // Generate a temporary password (in production, send invite email)
+    // Generate a temporary password
     const tempPassword = crypto.randomBytes(8).toString("hex");
-    const passwordHash = hashPassword(tempPassword);
+    const passwordHash = await hashPassword(tempPassword);
 
     await execute(
       "INSERT INTO users (id, email, name, role, password_hash) VALUES (?, ?, ?, ?, ?)",
       [id, email, name || null, role, passwordHash]
     );
+
+    // Add user to team if teamId provided
+    if (teamId) {
+      const teamRole = role === "team_lead" ? "lead" : "member";
+      await execute(
+        "INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, ?)",
+        [teamId, id, teamRole]
+      );
+    }
 
     const user = await query<User>(
       "SELECT id, email, name, role, is_active, created_at, updated_at FROM users WHERE id = ?",

@@ -44,7 +44,8 @@ interface HealthCheck {
   method: "GET" | "HEAD";
   expected_status: number;
   timeout_ms: number;
-  is_enabled: boolean;
+  interval_ms?: number;
+  enabled: boolean;
   notify_on_down: boolean;
   team_id: string | null;
   status: "up" | "down" | "unknown";
@@ -53,10 +54,20 @@ interface HealthCheck {
   created_at: string;
 }
 
-function GeneralSettings({ teams, users }: { teams: Team[]; users: User[] }) {
+function GeneralSettings({ teams, users, isAdmin, currentUser }: { teams: Team[]; users: User[]; isAdmin: boolean; currentUser: CurrentUser | null }) {
   const [defaultWebhook, setDefaultWebhook] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  
+  // GitHub token state
+  const [githubToken, setGithubToken] = useState("");
+  const [maskedToken, setMaskedToken] = useState<string | null>(null);
+  const [hasToken, setHasToken] = useState(false);
+  const [savingToken, setSavingToken] = useState(false);
+  const [tokenSaved, setTokenSaved] = useState(false);
+  const [showTokenInput, setShowTokenInput] = useState(false);
+
+  const canDeploy = currentUser?.role === "system_admin" || currentUser?.role === "team_lead";
 
   useEffect(() => {
     fetch("/api/settings")
@@ -67,7 +78,18 @@ function GeneralSettings({ teams, users }: { teams: Team[]; users: User[] }) {
         }
       })
       .catch(() => {});
-  }, []);
+    
+    // Fetch GitHub token status (only if user can deploy)
+    if (canDeploy) {
+      fetch("/api/auth/token")
+        .then((res) => res.json())
+        .then((json) => {
+          setHasToken(json.hasToken);
+          setMaskedToken(json.maskedToken);
+        })
+        .catch(() => {});
+    }
+  }, [canDeploy]);
 
   const saveWebhook = async () => {
     setSaving(true);
@@ -86,62 +108,229 @@ function GeneralSettings({ teams, users }: { teams: Team[]; users: User[] }) {
     }
   };
 
+  const saveGithubToken = async () => {
+    setSavingToken(true);
+    try {
+      const res = await fetch("/api/auth/token", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ github_token: githubToken }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setTokenSaved(true);
+        setShowTokenInput(false);
+        setGithubToken("");
+        // Refresh token status
+        const tokenRes = await fetch("/api/auth/token");
+        const tokenJson = await tokenRes.json();
+        setHasToken(tokenJson.hasToken);
+        setMaskedToken(tokenJson.maskedToken);
+        setTimeout(() => setTokenSaved(false), 2000);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setSavingToken(false);
+    }
+  };
+
+  const clearGithubToken = async () => {
+    setSavingToken(true);
+    try {
+      await fetch("/api/auth/token", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ github_token: null }),
+      });
+      setHasToken(false);
+      setMaskedToken(null);
+    } catch {
+      // ignore
+    } finally {
+      setSavingToken(false);
+    }
+  };
+
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case "system_admin": return "System Admin";
+      case "team_lead": return "Team Lead";
+      default: return "User";
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Profile Info - visible to all */}
       <div className="rounded-xl bg-gray-900 border border-gray-800 p-6">
-        <h2 className="text-lg font-bold mb-4">Default Teams Webhook</h2>
-        <p className="text-gray-400 text-sm mb-4">
-          This webhook receives alerts for apps not assigned to a specific team,
-          or when a team doesn&apos;t have its own webhook configured.
-        </p>
+        <h2 className="text-lg font-bold mb-4">My Profile</h2>
         <div className="space-y-3">
-          <input
-            type="url"
-            value={defaultWebhook}
-            onChange={(e) => setDefaultWebhook(e.target.value)}
-            placeholder="https://..."
-            className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-base"
-          />
-          <button
-            onClick={saveWebhook}
-            disabled={saving}
-            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium disabled:opacity-50 flex items-center gap-2"
-          >
-            {saving ? "Saving..." : saved ? "✓ Saved" : "Save Webhook"}
-          </button>
+          <div className="flex justify-between items-center py-2 border-b border-gray-800">
+            <span className="text-gray-400">Email</span>
+            <span className="font-medium">{currentUser?.email || "—"}</span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b border-gray-800">
+            <span className="text-gray-400">Name</span>
+            <span className="font-medium">{currentUser?.name || "—"}</span>
+          </div>
+          <div className="flex justify-between items-center py-2 border-b border-gray-800">
+            <span className="text-gray-400">Role</span>
+            <span className={`px-2 py-1 rounded text-sm ${
+              currentUser?.role === "system_admin" ? "bg-purple-900/50 text-purple-400" :
+              currentUser?.role === "team_lead" ? "bg-blue-900/50 text-blue-400" :
+              "bg-gray-700 text-gray-300"
+            }`}>
+              {currentUser ? getRoleLabel(currentUser.role) : "—"}
+            </span>
+          </div>
+          {currentUser?.teamIds?.[0] && (
+            <div className="flex justify-between items-center py-2">
+              <span className="text-gray-400">Team</span>
+              <span className="font-medium">
+                {teams.find(t => t.id === currentUser.teamIds[0])?.name || "—"}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="rounded-xl bg-gray-900 border border-gray-800 p-6">
-        <h2 className="text-lg font-bold mb-4">Statistics</h2>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="p-4 bg-gray-800/50 rounded-lg">
-            <p className="text-2xl font-bold text-blue-400">{teams.length}</p>
-            <p className="text-sm text-gray-400">Teams</p>
-          </div>
-          <div className="p-4 bg-gray-800/50 rounded-lg">
-            <p className="text-2xl font-bold text-green-400">{users.length}</p>
-            <p className="text-sm text-gray-400">Users</p>
+      {/* Admin-only: Default Teams Webhook */}
+      {isAdmin && (
+        <div className="rounded-xl bg-gray-900 border border-gray-800 p-6">
+          <h2 className="text-lg font-bold mb-4">Default Teams Webhook</h2>
+          <p className="text-gray-400 text-sm mb-4">
+            This webhook receives alerts for apps not assigned to a specific team,
+            or when a team doesn&apos;t have its own webhook configured.
+          </p>
+          <div className="space-y-3">
+            <input
+              type="url"
+              value={defaultWebhook}
+              onChange={(e) => setDefaultWebhook(e.target.value)}
+              placeholder="https://..."
+              className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-base"
+            />
+            <button
+              onClick={saveWebhook}
+              disabled={saving}
+              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving ? "Saving..." : saved ? "✓ Saved" : "Save Webhook"}
+            </button>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="rounded-xl bg-gray-900 border border-gray-800 p-6">
-        <h2 className="text-lg font-bold mb-4">How Notifications Work</h2>
-        <div className="text-sm text-gray-400 space-y-2">
-          <p>📱 When an app goes down or recovers:</p>
-          <ol className="list-decimal list-inside space-y-1 ml-2">
-            <li>Check if app is assigned to a team</li>
-            <li>If team has a webhook → send to team webhook</li>
-            <li>Otherwise → send to default webhook (above)</li>
-          </ol>
+      {/* Admin-only: Statistics */}
+      {isAdmin && (
+        <div className="rounded-xl bg-gray-900 border border-gray-800 p-6">
+          <h2 className="text-lg font-bold mb-4">Statistics</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 bg-gray-800/50 rounded-lg">
+              <p className="text-2xl font-bold text-blue-400">{teams.length}</p>
+              <p className="text-sm text-gray-400">Teams</p>
+            </div>
+            <div className="p-4 bg-gray-800/50 rounded-lg">
+              <p className="text-2xl font-bold text-green-400">{users.length}</p>
+              <p className="text-sm text-gray-400">Users</p>
+            </div>
+          </div>
         </div>
+      )}
+
+      {/* GitHub Token - only for team_lead+ who can deploy */}
+      {canDeploy && (
+      <div className="rounded-xl bg-gray-900 border border-gray-800 p-6">
+        <h2 className="text-lg font-bold mb-4">GitHub Token</h2>
+        <p className="text-gray-400 text-sm mb-4">
+          Your personal GitHub token is used for deploy operations (git pull with authentication).
+          This token is stored securely and only used when you trigger a deploy.
+        </p>
+        
+        {hasToken && !showTokenInput ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <code className="px-3 py-2 bg-gray-800 rounded-lg text-green-400 font-mono">
+                {maskedToken}
+              </code>
+              <span className="text-green-400 text-sm">✓ Token configured</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowTokenInput(true)}
+                className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm"
+              >
+                Update Token
+              </button>
+              <button
+                onClick={clearGithubToken}
+                disabled={savingToken}
+                className="px-4 py-2 rounded-lg bg-red-900/50 hover:bg-red-900 text-red-400 text-sm"
+              >
+                Remove Token
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <input
+              type="password"
+              value={githubToken}
+              onChange={(e) => setGithubToken(e.target.value)}
+              placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+              className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-base font-mono"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={saveGithubToken}
+                disabled={!githubToken || savingToken}
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingToken ? "Saving..." : tokenSaved ? "✓ Saved" : "Save Token"}
+              </button>
+              {showTokenInput && (
+                <button
+                  onClick={() => {
+                    setShowTokenInput(false);
+                    setGithubToken("");
+                  }}
+                  className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-gray-500">
+              Generate a token at GitHub → Settings → Developer settings → Personal access tokens.
+              Needs &apos;repo&apos; scope for private repositories.
+            </p>
+          </div>
+        )}
       </div>
+      )}
+
+      {/* Admin-only: How Notifications Work */}
+      {isAdmin && (
+        <div className="rounded-xl bg-gray-900 border border-gray-800 p-6">
+          <h2 className="text-lg font-bold mb-4">How Notifications Work</h2>
+          <div className="text-sm text-gray-400 space-y-2">
+            <p>📱 When an app goes down or recovers:</p>
+            <ol className="list-decimal list-inside space-y-1 ml-2">
+              <li>Check if app is assigned to a team</li>
+              <li>If team has a webhook → send to team webhook</li>
+              <li>Otherwise → send to default webhook (above)</li>
+            </ol>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function HealthChecksTab({ teams }: { teams: Team[] }) {
+function HealthChecksTab({ teams, currentUser }: { teams: Team[]; currentUser: CurrentUser | null }) {
+  const isAdmin = currentUser?.role === "system_admin";
+  const userTeamId = currentUser?.teamIds[0] || "";
   const [healthChecks, setHealthChecks] = useState<HealthCheck[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -156,6 +345,7 @@ function HealthChecksTab({ teams }: { teams: Team[] }) {
   const [formMethod, setFormMethod] = useState<"GET" | "HEAD">("GET");
   const [formExpectedStatus, setFormExpectedStatus] = useState(200);
   const [formTimeout, setFormTimeout] = useState(5000);
+  const [formInterval, setFormInterval] = useState(900000); // 15 minutes default
   const [formEnabled, setFormEnabled] = useState(true);
   const [formNotifyOnDown, setFormNotifyOnDown] = useState(true);
   const [formTeamId, setFormTeamId] = useState<string>("");
@@ -186,14 +376,20 @@ function HealthChecksTab({ teams }: { teams: Team[] }) {
     setFormMethod("GET");
     setFormExpectedStatus(200);
     setFormTimeout(5000);
+    setFormInterval(900000); // 15 minutes
     setFormEnabled(true);
     setFormNotifyOnDown(true);
-    setFormTeamId("");
+    // Auto-set team for non-admins
+    setFormTeamId(isAdmin ? "" : userTeamId);
     setEditingCheck(null);
   };
 
   const openCreateModal = () => {
     resetForm();
+    // Ensure team is set for non-admins
+    if (!isAdmin && userTeamId) {
+      setFormTeamId(userTeamId);
+    }
     setShowModal(true);
   };
 
@@ -204,7 +400,8 @@ function HealthChecksTab({ teams }: { teams: Team[] }) {
     setFormMethod(check.method);
     setFormExpectedStatus(check.expected_status);
     setFormTimeout(check.timeout_ms);
-    setFormEnabled(check.is_enabled);
+    setFormInterval(check.interval_ms || 900000);
+    setFormEnabled(check.enabled);
     setFormNotifyOnDown(check.notify_on_down);
     setFormTeamId(check.team_id || "");
     setShowModal(true);
@@ -235,7 +432,8 @@ function HealthChecksTab({ teams }: { teams: Team[] }) {
       method: formMethod,
       expected_status: formExpectedStatus,
       timeout_ms: formTimeout,
-      is_enabled: formEnabled,
+      interval_ms: formInterval,
+      enabled: formEnabled,
       notify_on_down: formNotifyOnDown,
       team_id: formTeamId || null,
     };
@@ -369,8 +567,13 @@ function HealthChecksTab({ teams }: { teams: Team[] }) {
                     <div className="text-xl">{getStatusIndicator(check.status)}</div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium truncate">{check.name}</span>
-                        {!check.is_enabled && (
+                        <Link
+                          href={`/healthcheck/${check.id}`}
+                          className="font-medium truncate hover:text-blue-400 transition"
+                        >
+                          {check.name}
+                        </Link>
+                        {!check.enabled && (
                           <span className="text-xs px-2 py-0.5 bg-gray-700 rounded">Disabled</span>
                         )}
                       </div>
@@ -397,6 +600,13 @@ function HealthChecksTab({ teams }: { teams: Team[] }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    <Link
+                      href={`/healthcheck/${check.id}`}
+                      className="p-3 sm:p-2 rounded-lg hover:bg-blue-900/50 text-gray-400 hover:text-blue-400 transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+                      title="View Details"
+                    >
+                      <Activity className="w-5 h-5 sm:w-4 sm:h-4" />
+                    </Link>
                     <button
                       onClick={() => openEditModal(check)}
                       className="p-3 sm:p-2 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition min-w-[44px] min-h-[44px] flex items-center justify-center"
@@ -498,23 +708,48 @@ function HealthChecksTab({ teams }: { teams: Team[] }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-2">
-                  Team (optional)
+                  Check Interval
+                </label>
+                <select
+                  value={formInterval}
+                  onChange={(e) => setFormInterval(parseInt(e.target.value))}
+                  className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none text-base"
+                >
+                  <option value={60000}>Every 1 minute</option>
+                  <option value={300000}>Every 5 minutes</option>
+                  <option value={900000}>Every 15 minutes</option>
+                  <option value={1800000}>Every 30 minutes</option>
+                  <option value={3600000}>Every 1 hour</option>
+                  <option value={21600000}>Every 6 hours</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  Team {!isAdmin && "(auto-assigned)"}
                 </label>
                 <select
                   value={formTeamId}
                   onChange={(e) => setFormTeamId(e.target.value)}
-                  className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none text-base"
+                  disabled={!isAdmin}
+                  className={`w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none text-base ${!isAdmin ? "opacity-60 cursor-not-allowed" : ""}`}
                 >
-                  <option value="">No team</option>
+                  {isAdmin && <option value="">No team</option>}
                   {teams.map((team) => (
                     <option key={team.id} value={team.id}>
                       {team.name}
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Alerts will be sent to team&apos;s webhook if configured
-                </p>
+                {!isAdmin && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Health checks are automatically assigned to your team
+                  </p>
+                )}
+                {isAdmin && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Alerts will be sent to team&apos;s webhook if configured
+                  </p>
+                )}
               </div>
               <div className="space-y-3 pt-2">
                 <label className="flex items-center gap-3 cursor-pointer">
@@ -588,12 +823,22 @@ function HealthChecksTab({ teams }: { teams: Team[] }) {
   );
 }
 
+interface CurrentUser {
+  id: string;
+  email: string;
+  name: string | null;
+  role: "system_admin" | "team_lead" | "user";
+  teamIds: string[];
+  teamName?: string;
+}
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("general");
   const [teams, setTeams] = useState<Team[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
   // Team form state
   const [showTeamForm, setShowTeamForm] = useState(false);
@@ -606,9 +851,19 @@ export default function SettingsPage() {
   const [userEmail, setUserEmail] = useState("");
   const [userName, setUserName] = useState("");
   const [userRole, setUserRole] = useState<"system_admin" | "team_lead" | "user">("user");
+  const [userTeamId, setUserTeamId] = useState<string>("");
   const [savingUser, setSavingUser] = useState(false);
   const [newUserPassword, setNewUserPassword] = useState<string | null>(null);
+  const [createdUserEmail, setCreatedUserEmail] = useState<string>("");
   const [copied, setCopied] = useState(false);
+
+  // Edit user state
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editUserName, setEditUserName] = useState("");
+  const [editUserRole, setEditUserRole] = useState<"system_admin" | "team_lead" | "user">("user");
+  const [editUserTeamId, setEditUserTeamId] = useState<string>("");
+  const [editUserActive, setEditUserActive] = useState(true);
+  const [savingEditUser, setSavingEditUser] = useState(false);
 
   // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: "team" | "user"; id: string; name: string } | null>(null);
@@ -641,14 +896,29 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const fetchCurrentUser = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me?includeTeams=true");
+      const json = await res.json();
+      if (json.user) {
+        setCurrentUser({
+          ...json.user,
+          teamIds: json.teamIds || [],
+        });
+      }
+    } catch {
+      // Ignore
+    }
+  }, []);
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([fetchTeams(), fetchUsers()]);
+      await Promise.all([fetchTeams(), fetchUsers(), fetchCurrentUser()]);
       setLoading(false);
     };
     loadData();
-  }, [fetchTeams, fetchUsers]);
+  }, [fetchTeams, fetchUsers, fetchCurrentUser]);
 
   const createTeam = async () => {
     if (!teamName.trim()) return;
@@ -700,6 +970,11 @@ export default function SettingsPage() {
     setSavingUser(true);
     setError(null);
 
+    // For non-admins, use their team
+    const effectiveTeamId = isAdmin ? userTeamId : (currentUser?.teamIds[0] || "");
+    // For non-admins, can't create system_admin
+    const effectiveRole = (!isAdmin && userRole === "system_admin") ? "user" : userRole;
+
     try {
       const res = await fetch("/api/users", {
         method: "POST",
@@ -707,17 +982,20 @@ export default function SettingsPage() {
         body: JSON.stringify({
           email: userEmail,
           name: userName || null,
-          role: userRole,
+          role: effectiveRole,
+          teamId: effectiveTeamId || null,
         }),
       });
       const json = await res.json();
       if (json.error) {
         setError(json.error);
       } else {
+        setCreatedUserEmail(userEmail);
         setNewUserPassword(json.tempPassword);
         setUserEmail("");
         setUserName("");
         setUserRole("user");
+        setUserTeamId("");
         fetchUsers();
       }
     } catch {
@@ -742,6 +1020,64 @@ export default function SettingsPage() {
     setDeleteConfirm(null);
   };
 
+  const openEditUser = async (user: User) => {
+    setEditingUser(user);
+    setEditUserName(user.name || "");
+    setEditUserRole(user.role);
+    setEditUserActive(user.is_active);
+    
+    // Fetch user's team membership
+    try {
+      const res = await fetch(`/api/teams`);
+      const json = await res.json();
+      if (!json.error) {
+        // Check each team for this user's membership (simple approach)
+        // In production, you'd have an API endpoint for this
+        setEditUserTeamId(""); // Default to no team
+        for (const team of json.data) {
+          const memberRes = await fetch(`/api/teams/${team.id}`);
+          const memberJson = await memberRes.json();
+          if (memberJson.data?.members?.some((m: { id: string }) => m.id === user.id)) {
+            setEditUserTeamId(team.id);
+            break;
+          }
+        }
+      }
+    } catch {
+      setEditUserTeamId("");
+    }
+  };
+
+  const saveEditUser = async () => {
+    if (!editingUser) return;
+    setSavingEditUser(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/users/${editingUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editUserName || null,
+          role: editUserRole,
+          is_active: editUserActive,
+          teamId: editUserTeamId || null,
+        }),
+      });
+      const json = await res.json();
+      if (json.error) {
+        setError(json.error);
+      } else {
+        setEditingUser(null);
+        fetchUsers();
+      }
+    } catch {
+      setError("Failed to update user");
+    } finally {
+      setSavingEditUser(false);
+    }
+  };
+
   const copyPassword = () => {
     if (newUserPassword) {
       navigator.clipboard.writeText(newUserPassword);
@@ -750,12 +1086,23 @@ export default function SettingsPage() {
     }
   };
 
-  const tabs = [
-    { id: "general" as Tab, label: "General", icon: Settings },
-    { id: "teams" as Tab, label: "Teams", icon: UsersRound },
-    { id: "users" as Tab, label: "Users", icon: Users },
-    { id: "healthchecks" as Tab, label: "Health Checks", icon: Activity },
+  const isAdmin = currentUser?.role === "system_admin";
+  const isTeamLead = currentUser?.role === "team_lead";
+  
+  // Filter tabs based on role
+  const allTabs = [
+    { id: "general" as Tab, label: "General", icon: Settings, roles: ["system_admin", "team_lead", "user"] },
+    { id: "teams" as Tab, label: "Teams", icon: UsersRound, roles: ["system_admin", "team_lead"] },
+    { id: "users" as Tab, label: "Users", icon: Users, roles: ["system_admin", "team_lead"] },
+    { id: "healthchecks" as Tab, label: "Health Checks", icon: Activity, roles: ["system_admin", "team_lead"] },
   ];
+  const tabs = allTabs.filter(tab => currentUser && tab.roles.includes(currentUser.role));
+  
+  // Filter teams to only show user's teams for non-admins
+  const visibleTeams = isAdmin ? teams : teams.filter(t => currentUser?.teamIds.includes(t.id));
+  
+  // Filter users to only show team members for non-admins  
+  const visibleUsers = isAdmin ? users : users; // We'll filter in the component with team membership
 
   if (loading) {
     return (
@@ -819,14 +1166,14 @@ export default function SettingsPage() {
 
         {/* General Tab */}
         {activeTab === "general" && (
-          <GeneralSettings teams={teams} users={users} />
+          <GeneralSettings teams={visibleTeams} users={visibleUsers} isAdmin={isAdmin} currentUser={currentUser} />
         )}
 
         {/* Teams Tab */}
         {activeTab === "teams" && (
           <div className="space-y-6">
-            {/* Create Team Form */}
-            {showTeamForm ? (
+            {/* Create Team Form - Admin only */}
+            {isAdmin && showTeamForm ? (
               <div className="rounded-xl bg-gray-900 border border-gray-800 p-4 sm:p-6">
                 <h2 className="text-lg font-bold mb-4">Create Team</h2>
                 <div className="space-y-4">
@@ -878,7 +1225,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : isAdmin ? (
               <button
                 onClick={() => setShowTeamForm(true)}
                 className="w-full py-4 sm:py-3 rounded-xl border-2 border-dashed border-gray-700 text-gray-400 hover:border-gray-600 hover:text-white flex items-center justify-center gap-2 transition min-h-[56px]"
@@ -886,14 +1233,14 @@ export default function SettingsPage() {
                 <Plus className="w-5 h-5" />
                 Create Team
               </button>
-            )}
+            ) : null}
 
             {/* Teams List */}
             <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
               <div className="px-4 py-3 bg-gray-800/50 border-b border-gray-800">
-                <h2 className="font-bold">Teams ({teams.length})</h2>
+                <h2 className="font-bold">{isAdmin ? "Teams" : "My Team"} ({visibleTeams.length})</h2>
               </div>
-              {teams.length === 0 ? (
+              {visibleTeams.length === 0 ? (
                 <div className="p-8 text-center text-gray-500">
                   <UsersRound className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p>No teams yet</p>
@@ -901,7 +1248,7 @@ export default function SettingsPage() {
                 </div>
               ) : (
                 <div className="divide-y divide-gray-800">
-                  {teams.map((team) => (
+                  {visibleTeams.map((team) => (
                     <div
                       key={team.id}
                       className="px-4 py-4 sm:py-3 flex items-center justify-between hover:bg-gray-800/30 gap-3"
@@ -917,12 +1264,27 @@ export default function SettingsPage() {
                           <div className="text-xs text-gray-500 truncate">{team.description}</div>
                         )}
                       </div>
-                      <button
-                        onClick={() => setDeleteConfirm({ type: "team", id: team.id, name: team.name })}
-                        className="p-3 sm:p-2 rounded-lg hover:bg-red-900/50 text-gray-400 hover:text-red-400 transition min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0"
-                      >
-                        <Trash2 className="w-5 h-5 sm:w-4 sm:h-4" />
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {/* Edit button - for team leads and admins */}
+                        <button
+                          onClick={() => {
+                            // TODO: Add edit team modal
+                            alert("Edit team webhook coming soon!");
+                          }}
+                          className="p-3 sm:p-2 rounded-lg hover:bg-blue-900/50 text-gray-400 hover:text-blue-400 transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+                        >
+                          <Pencil className="w-5 h-5 sm:w-4 sm:h-4" />
+                        </button>
+                        {/* Delete button - admin only */}
+                        {isAdmin && (
+                          <button
+                            onClick={() => setDeleteConfirm({ type: "team", id: team.id, name: team.name })}
+                            className="p-3 sm:p-2 rounded-lg hover:bg-red-900/50 text-gray-400 hover:text-red-400 transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+                          >
+                            <Trash2 className="w-5 h-5 sm:w-4 sm:h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -938,23 +1300,60 @@ export default function SettingsPage() {
             {newUserPassword && (
               <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50">
                 <div className="bg-gray-900 rounded-t-xl sm:rounded-xl p-6 w-full sm:max-w-md border-t sm:border border-gray-700 max-h-[90vh] overflow-y-auto">
-                  <h2 className="text-xl font-bold mb-4">User Created</h2>
-                  <p className="text-gray-400 mb-2">
-                    Temporary password (share with user):
-                  </p>
-                  <div className="flex gap-2 mb-4">
-                    <div className="flex-1 bg-gray-800 p-3 rounded-lg font-mono text-sm break-all">
-                      {newUserPassword}
+                  <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                    <Check className="w-6 h-6 text-green-400" />
+                    User Created
+                  </h2>
+                  
+                  <div className="space-y-3 mb-4">
+                    <div>
+                      <p className="text-gray-500 text-xs uppercase mb-1">Email / Username</p>
+                      <div className="flex gap-2">
+                        <div className="flex-1 bg-gray-800 p-3 rounded-lg font-mono text-sm break-all">
+                          {createdUserEmail}
+                        </div>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(createdUserEmail);
+                          }}
+                          className="p-3 rounded-lg bg-gray-700 hover:bg-gray-600 transition min-w-[48px] min-h-[48px] flex items-center justify-center"
+                          title="Copy email"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={copyPassword}
-                      className="p-3 rounded-lg bg-gray-700 hover:bg-gray-600 transition min-w-[48px] min-h-[48px] flex items-center justify-center"
-                    >
-                      {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5" />}
-                    </button>
+                    
+                    <div>
+                      <p className="text-gray-500 text-xs uppercase mb-1">Password</p>
+                      <div className="flex gap-2">
+                        <div className="flex-1 bg-gray-800 p-3 rounded-lg font-mono text-sm break-all text-green-400">
+                          {newUserPassword}
+                        </div>
+                        <button
+                          onClick={copyPassword}
+                          className="p-3 rounded-lg bg-gray-700 hover:bg-gray-600 transition min-w-[48px] min-h-[48px] flex items-center justify-center"
+                          title="Copy password"
+                        >
+                          {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5" />}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-yellow-400 text-sm mb-4">
-                    ⚠️ This password won&apos;t be shown again!
+                  
+                  <button
+                    onClick={() => {
+                      const creds = `Email: ${createdUserEmail}\nPassword: ${newUserPassword}`;
+                      navigator.clipboard.writeText(creds);
+                    }}
+                    className="w-full py-3 mb-3 rounded-lg bg-gray-700 hover:bg-gray-600 transition flex items-center justify-center gap-2"
+                  >
+                    <Copy className="w-4 h-4" />
+                    Copy Both
+                  </button>
+                  
+                  <p className="text-yellow-400 text-sm mb-4 text-center">
+                    ⚠️ Save these credentials - password won&apos;t be shown again!
                   </p>
                   <button
                     onClick={() => {
@@ -972,7 +1371,7 @@ export default function SettingsPage() {
             {/* Create User Form */}
             {showUserForm && !newUserPassword ? (
               <div className="rounded-xl bg-gray-900 border border-gray-800 p-4 sm:p-6">
-                <h2 className="text-lg font-bold mb-4">Invite User</h2>
+                <h2 className="text-lg font-bold mb-4">Add User</h2>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-400 mb-2">
@@ -1007,10 +1406,39 @@ export default function SettingsPage() {
                       onChange={(e) => setUserRole(e.target.value as "system_admin" | "team_lead" | "user")}
                       className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none text-base"
                     >
-                      <option value="system_admin">System Admin - Full access</option>
+                      {/* Only admins can create system_admin users */}
+                      {isAdmin && <option value="system_admin">System Admin - Full access</option>}
                       <option value="team_lead">Team Lead - Manage team apps</option>
                       <option value="user">User - View team apps</option>
                     </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      Team {!isAdmin && "(auto-assigned)"}
+                    </label>
+                    <select
+                      value={isAdmin ? userTeamId : (currentUser?.teamIds[0] || "")}
+                      onChange={(e) => setUserTeamId(e.target.value)}
+                      disabled={!isAdmin}
+                      className={`w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none text-base ${!isAdmin ? "opacity-60 cursor-not-allowed" : ""}`}
+                    >
+                      {isAdmin && <option value="">No team (system_admin only)</option>}
+                      {visibleTeams.map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.name}
+                        </option>
+                      ))}
+                    </select>
+                    {!isAdmin && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        New users will be added to your team
+                      </p>
+                    )}
+                    {isAdmin && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Non-admin users must be in a team to see apps
+                      </p>
+                    )}
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2 pt-2">
                     <button
@@ -1019,6 +1447,7 @@ export default function SettingsPage() {
                         setUserEmail("");
                         setUserName("");
                         setUserRole("user");
+                        setUserTeamId("");
                       }}
                       className="flex-1 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition min-h-[48px]"
                     >
@@ -1029,7 +1458,7 @@ export default function SettingsPage() {
                       disabled={!userEmail.trim() || savingUser}
                       className="flex-1 py-3 sm:py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
                     >
-                      {savingUser ? "Creating..." : "Invite User"}
+                      {savingUser ? "Creating..." : "Add User"}
                     </button>
                   </div>
                 </div>
@@ -1040,7 +1469,7 @@ export default function SettingsPage() {
                 className="w-full py-4 sm:py-3 rounded-xl border-2 border-dashed border-gray-700 text-gray-400 hover:border-gray-600 hover:text-white flex items-center justify-center gap-2 transition min-h-[56px]"
               >
                 <Plus className="w-5 h-5" />
-                Invite User
+                Add User
               </button>
             )}
 
@@ -1091,6 +1520,12 @@ export default function SettingsPage() {
                           {user.role}
                         </span>
                         <button
+                          onClick={() => openEditUser(user)}
+                          className="p-3 sm:p-2 rounded-lg hover:bg-blue-900/50 text-gray-400 hover:text-blue-400 transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+                        >
+                          <Pencil className="w-5 h-5 sm:w-4 sm:h-4" />
+                        </button>
+                        <button
                           onClick={() => setDeleteConfirm({ type: "user", id: user.id, name: user.name || user.email })}
                           className="p-3 sm:p-2 rounded-lg hover:bg-red-900/50 text-gray-400 hover:text-red-400 transition min-w-[44px] min-h-[44px] flex items-center justify-center"
                         >
@@ -1102,12 +1537,111 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
+
+            {/* Edit User Modal */}
+            {editingUser && (
+              <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50">
+                <div className="bg-gray-900 rounded-t-xl sm:rounded-xl p-6 w-full sm:max-w-md border-t sm:border border-gray-700">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold">Edit User</h2>
+                    <button
+                      onClick={() => setEditingUser(null)}
+                      className="p-2 rounded-lg hover:bg-gray-800"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={editingUser.email}
+                        disabled
+                        className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-500 cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">
+                        Name
+                      </label>
+                      <input
+                        type="text"
+                        value={editUserName}
+                        onChange={(e) => setEditUserName(e.target.value)}
+                        className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">
+                        Role
+                      </label>
+                      <select
+                        value={editUserRole}
+                        onChange={(e) => setEditUserRole(e.target.value as "system_admin" | "team_lead" | "user")}
+                        className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="system_admin">System Admin</option>
+                        <option value="team_lead">Team Lead</option>
+                        <option value="user">User</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">
+                        Team
+                      </label>
+                      <select
+                        value={editUserTeamId}
+                        onChange={(e) => setEditUserTeamId(e.target.value)}
+                        className="w-full px-4 py-3 sm:py-2 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="">No team</option>
+                        {teams.map((team) => (
+                          <option key={team.id} value={team.id}>
+                            {team.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="editUserActive"
+                        checked={editUserActive}
+                        onChange={(e) => setEditUserActive(e.target.checked)}
+                        className="w-5 h-5 rounded bg-gray-800 border-gray-700"
+                      />
+                      <label htmlFor="editUserActive" className="text-sm">
+                        Active (can log in)
+                      </label>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        onClick={() => setEditingUser(null)}
+                        className="flex-1 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition min-h-[48px]"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={saveEditUser}
+                        disabled={savingEditUser}
+                        className="flex-1 py-3 sm:py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition disabled:opacity-50 min-h-[48px]"
+                      >
+                        {savingEditUser ? "Saving..." : "Save"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Health Checks Tab */}
         {activeTab === "healthchecks" && (
-          <HealthChecksTab teams={teams} />
+          <HealthChecksTab teams={visibleTeams} currentUser={currentUser} />
         )}
 
         {/* Delete Confirmation Modal - full screen on mobile */}

@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS servers (
     hostname VARCHAR(100),
     last_heartbeat DATETIME,
     is_online BOOLEAN DEFAULT FALSE,
+    run_health_check BOOLEAN DEFAULT FALSE,
+    default_team_id VARCHAR(36),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_api_key (api_key),

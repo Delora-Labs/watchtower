@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { NextRequest, NextResponse } from "next/server";
+import { query, queryOne } from "@/lib/db";
 
 interface HealthCheck {
   id: string;
@@ -13,8 +13,25 @@ interface HealthCheck {
 }
 
 // GET /api/health-checks/active - Returns all enabled health checks for the agent
-export async function GET() {
+// Only returns checks if the requesting server has run_health_checks = TRUE
+export async function GET(request: NextRequest) {
   try {
+    // Check which server is requesting via API key
+    const apiKey = request.headers.get("Authorization")?.replace("Bearer ", "");
+    
+    if (apiKey) {
+      // Verify this server should run health checks
+      const server = await queryOne<{ run_health_check: boolean }>(
+        "SELECT run_health_check FROM servers WHERE api_key = ?",
+        [apiKey]
+      );
+      
+      if (!server || !server.run_health_check) {
+        // This server shouldn't run health checks - return empty array
+        return NextResponse.json({ data: [] });
+      }
+    }
+
     const checks = await query<HealthCheck>(
       `SELECT id, name, url, method, expected_status, timeout_ms, interval_ms, headers
        FROM health_checks

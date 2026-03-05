@@ -14,8 +14,24 @@ import {
   Activity,
   ChevronDown,
 } from "lucide-react";
-import { CpuChart, MemoryChart, DiskChart } from "@/components/charts/MetricsCharts";
-import { StatCard } from "@/components/charts/StatCard";
+
+// Dynamic imports for recharts components to avoid SSR issues
+const CpuChart = dynamic(
+  () => import("@/components/charts/MetricsCharts").then((mod) => mod.CpuChart),
+  { ssr: false, loading: () => <div className="h-64 bg-gray-800/50 rounded animate-pulse" /> }
+);
+const MemoryChart = dynamic(
+  () => import("@/components/charts/MetricsCharts").then((mod) => mod.MemoryChart),
+  { ssr: false, loading: () => <div className="h-64 bg-gray-800/50 rounded animate-pulse" /> }
+);
+const DiskChart = dynamic(
+  () => import("@/components/charts/MetricsCharts").then((mod) => mod.DiskChart),
+  { ssr: false, loading: () => <div className="h-64 bg-gray-800/50 rounded animate-pulse" /> }
+);
+const StatCard = dynamic(
+  () => import("@/components/charts/StatCard").then((mod) => mod.StatCard),
+  { ssr: false, loading: () => <div className="h-32 bg-gray-800/50 rounded animate-pulse" /> }
+);
 import { formatDistanceToNow } from "date-fns";
 
 interface ServerInfo {

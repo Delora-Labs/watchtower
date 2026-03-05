@@ -40,6 +40,7 @@ interface HeartbeatPayload {
 interface Server {
   id: string;
   name: string;
+  default_team_id: string | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing API key" }, { status: 401 });
     }
     const server = await queryOne<Server>(
-      "SELECT id, name FROM servers WHERE api_key = ?",
+      "SELECT id, name, default_team_id FROM servers WHERE api_key = ?",
       [apiKey]
     );
 
@@ -131,6 +132,15 @@ export async function POST(request: NextRequest) {
           [newAppId, server.id, app.pm2_id, app.name, app.status, cpuPct, memMb, uptimeMs, app.restarts]
         );
         
+        // Auto-assign to server's default team if set
+        if (server.default_team_id) {
+          await execute(
+            `INSERT INTO app_assignments (app_id, team_id, notify_on_down, notify_on_restart)
+             VALUES (?, ?, TRUE, FALSE)`,
+            [newAppId, server.default_team_id]
+          );
+        }
+        
         // Record app metrics for averaging (for new app too)
         await execute(
           `INSERT INTO app_metrics (app_id, cpu_percent, memory_mb) VALUES (?, ?, ?)`,
@@ -141,6 +151,12 @@ export async function POST(request: NextRequest) {
     
     // Cleanup old app metrics (older than 1 hour)
     await execute(`DELETE FROM app_metrics WHERE recorded_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)`);
+    
+    // Auto-cleanup: delete apps not seen for 24 hours
+    await execute(`DELETE FROM app_assignments WHERE app_id IN (
+      SELECT id FROM apps WHERE last_seen < DATE_SUB(NOW(), INTERVAL 24 HOUR)
+    )`);
+    await execute(`DELETE FROM apps WHERE last_seen < DATE_SUB(NOW(), INTERVAL 24 HOUR)`);
     
     // Check for other servers that may be offline
     await checkServerOffline();
@@ -156,15 +172,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check for pending commands
-    const commands = await query<{ id: string; app_name: string; action: string }>(
-      "SELECT id, app_name, action FROM commands WHERE server_id = ? AND status = 'pending'",
+    // Check for pending commands (include github token for deploy commands)
+    const commands = await query<{ id: string; app_name: string; action: string; github_token: string | null }>(
+      `SELECT c.id, c.app_name, c.action, u.github_token 
+       FROM commands c 
+       LEFT JOIN users u ON c.created_by = u.id
+       WHERE c.server_id = ? AND c.status = 'pending'`,
       [server.id]
     );
 
     return NextResponse.json({
       success: true,
-      commands: commands.map(c => ({ id: c.id, app: c.app_name, action: c.action })),
+      commands: commands.map(c => ({ 
+        id: c.id, 
+        app: c.app_name, 
+        action: c.action,
+        ...(c.action === 'deploy' && c.github_token ? { token: c.github_token } : {})
+      })),
     });
   } catch (error) {
     console.error("Heartbeat error:", error);
