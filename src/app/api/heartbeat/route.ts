@@ -16,6 +16,55 @@ interface AppReport {
   restarts: number;
 }
 
+interface HealthResult {
+  status: 'healthy' | 'warning' | 'critical';
+  reason: string | null;
+}
+
+function calculateHealthStatus(
+  pmStatus: string,
+  uptimeMs: number,
+  restarts: number,
+  prevRestarts: number
+): HealthResult {
+  const restartDelta = restarts - prevRestarts;
+  
+  // Critical conditions
+  if (pmStatus === 'errored') {
+    return { status: 'critical', reason: 'App errored' };
+  }
+  if (restartDelta > 20) {
+    return { status: 'critical', reason: `Crash loop: ${restartDelta} restarts since last check` };
+  }
+  
+  // Warning conditions
+  if (pmStatus === 'waiting restart') {
+    return { status: 'warning', reason: 'Waiting to restart' };
+  }
+  if (pmStatus === 'launching') {
+    return { status: 'warning', reason: 'Launching' };
+  }
+  if (restartDelta > 5) {
+    return { status: 'warning', reason: `High restarts: ${restartDelta} since last check` };
+  }
+  if (pmStatus === 'online' && uptimeMs > 0 && uptimeMs < 60000) {
+    return { status: 'warning', reason: 'Recently restarted (uptime < 1 min)' };
+  }
+  
+  // Stopped is not unhealthy, just stopped
+  if (pmStatus === 'stopped') {
+    return { status: 'healthy', reason: null };
+  }
+  
+  // Online and stable
+  if (pmStatus === 'online') {
+    return { status: 'healthy', reason: null };
+  }
+  
+  // Unknown status
+  return { status: 'warning', reason: `Unknown status: ${pmStatus}` };
+}
+
 interface HeartbeatPayload {
   hostname: string;
   os: string;
@@ -105,18 +154,32 @@ export async function POST(request: NextRequest) {
       const memMb = app.memory_mb ?? app.memory ?? 0;
       const uptimeMs = app.uptime_ms ?? app.uptime ?? 0;
       
-      const existingApp = await queryOne<{ id: string }>(
-        "SELECT id FROM apps WHERE server_id = ? AND pm2_name = ?",
+      const existingApp = await queryOne<{ id: string; prev_restarts: number }>(
+        "SELECT id, restarts as prev_restarts FROM apps WHERE server_id = ? AND pm2_name = ?",
         [server.id, app.name]
       );
 
       if (existingApp) {
+        // Calculate health status
+        const health = calculateHealthStatus(
+          app.status,
+          uptimeMs,
+          app.restarts,
+          existingApp.prev_restarts || 0
+        );
+        const restartVelocity = app.restarts - (existingApp.prev_restarts || 0);
+        
         await execute(
           `UPDATE apps SET 
             pm2_id = ?, status = ?, cpu_percent = ?, memory_mb = ?,
-            uptime_ms = ?, restarts = ?, last_seen = NOW()
+            uptime_ms = ?, restarts = ?, last_seen = NOW(),
+            health_status = ?, health_reason = ?,
+            prev_restarts = ?, restart_velocity = ?
            WHERE id = ?`,
-          [app.pm2_id, app.status, cpuPct, memMb, uptimeMs, app.restarts, existingApp.id]
+          [app.pm2_id, app.status, cpuPct, memMb, uptimeMs, app.restarts,
+           health.status, health.reason,
+           app.restarts, restartVelocity,
+           existingApp.id]
         );
         
         // Record app metrics for averaging
@@ -125,11 +188,14 @@ export async function POST(request: NextRequest) {
           [existingApp.id, cpuPct, memMb]
         );
       } else {
+        // New app - calculate initial health
+        const health = calculateHealthStatus(app.status, uptimeMs, app.restarts, 0);
+        
         const newAppId = generateId();
         await execute(
-          `INSERT INTO apps (id, server_id, pm2_id, pm2_name, status, cpu_percent, memory_mb, uptime_ms, restarts, last_seen)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-          [newAppId, server.id, app.pm2_id, app.name, app.status, cpuPct, memMb, uptimeMs, app.restarts]
+          `INSERT INTO apps (id, server_id, pm2_id, pm2_name, status, cpu_percent, memory_mb, uptime_ms, restarts, last_seen, health_status, health_reason, prev_restarts, restart_velocity)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)`,
+          [newAppId, server.id, app.pm2_id, app.name, app.status, cpuPct, memMb, uptimeMs, app.restarts, health.status, health.reason, app.restarts, 0]
         );
         
         // Auto-assign to server's default team if set
@@ -152,11 +218,11 @@ export async function POST(request: NextRequest) {
     // Cleanup old app metrics (older than 1 hour)
     await execute(`DELETE FROM app_metrics WHERE recorded_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)`);
     
-    // Auto-cleanup: delete apps not seen for 24 hours
-    await execute(`DELETE FROM app_assignments WHERE app_id IN (
-      SELECT id FROM apps WHERE last_seen < DATE_SUB(NOW(), INTERVAL 24 HOUR)
-    )`);
-    await execute(`DELETE FROM apps WHERE last_seen < DATE_SUB(NOW(), INTERVAL 24 HOUR)`);
+    // Auto-cleanup disabled - stopped apps should remain visible
+    // await execute(`DELETE FROM app_assignments WHERE app_id IN (
+    //   SELECT id FROM apps WHERE last_seen < DATE_SUB(NOW(), INTERVAL 24 HOUR)
+    // )`);
+    // await execute(`DELETE FROM apps WHERE last_seen < DATE_SUB(NOW(), INTERVAL 24 HOUR)`);
     
     // Check for other servers that may be offline
     await checkServerOffline();

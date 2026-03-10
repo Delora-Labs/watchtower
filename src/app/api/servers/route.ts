@@ -34,9 +34,12 @@ export async function GET() {
       avg_memory_5min: number;
       uptime_ms: number;
       restarts: number;
+      restart_velocity: number;
       last_seen: Date;
       notifications_enabled: boolean;
       team_id: string | null;
+      health_status: 'healthy' | 'warning' | 'critical';
+      health_reason: string | null;
     }
     
     let apps: AppRow[];
@@ -45,7 +48,10 @@ export async function GET() {
       // System admin or unauthenticated (agent API) sees all apps with 5-min averages
       apps = await query<AppRow>(`
         SELECT 
-          a.*, 
+          a.id, a.server_id, a.pm2_id, a.pm2_name, a.display_name, a.url, a.category,
+          a.status, a.cpu_percent, a.memory_mb, a.uptime_ms, a.restarts,
+          a.restart_velocity, a.last_seen, a.notifications_enabled,
+          a.health_status, a.health_reason,
           aa.team_id,
           COALESCE(AVG(m.cpu_percent), a.cpu_percent) as avg_cpu_5min,
           COALESCE(AVG(m.memory_mb), a.memory_mb) as avg_memory_5min
@@ -65,7 +71,10 @@ export async function GET() {
         const placeholders = teamIds.map(() => "?").join(",");
         apps = await query<AppRow>(
           `SELECT 
-            a.*, 
+            a.id, a.server_id, a.pm2_id, a.pm2_name, a.display_name, a.url, a.category,
+            a.status, a.cpu_percent, a.memory_mb, a.uptime_ms, a.restarts,
+            a.restart_velocity, a.last_seen, a.notifications_enabled,
+            a.health_status, a.health_reason,
             aa.team_id,
             COALESCE(AVG(m.cpu_percent), a.cpu_percent) as avg_cpu_5min,
             COALESCE(AVG(m.memory_mb), a.memory_mb) as avg_memory_5min

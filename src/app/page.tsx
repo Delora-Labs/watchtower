@@ -2040,7 +2040,7 @@ export default function Dashboard() {
                   className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden"
                 >
                   {/* Server Header - Clickable to collapse */}
-                  <button
+                  <div role="button" tabIndex={0}
                     onClick={() => toggleServerCollapse(server.id)}
                     className="w-full px-4 py-3 bg-gray-800/50 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-0 sm:justify-between hover:bg-gray-800/70 transition cursor-pointer text-left"
                   >
@@ -2120,7 +2120,7 @@ export default function Dashboard() {
                         </button>
                       )}
                     </div>
-                  </button>
+                  </div>
 
                   {/* Apps - only show when not collapsed */}
                   {!isCollapsed && (

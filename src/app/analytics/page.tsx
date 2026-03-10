@@ -261,7 +261,7 @@ function AnalyticsContent() {
             {/* Desktop controls */}
             <div className="hidden md:flex items-center gap-3">
               {/* Server Selector */}
-              <div className="relative">
+              <div className="relative z-30">
                 <button
                   onClick={() => setShowServerDropdown(!showServerDropdown)}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition min-w-[200px]"
@@ -344,7 +344,7 @@ function AnalyticsContent() {
           {/* Mobile controls row */}
           <div className="md:hidden flex flex-col gap-2">
             {/* Server Selector - Full width on mobile */}
-            <div className="relative">
+            <div className="relative z-30">
               <button
                 onClick={() => setShowServerDropdown(!showServerDropdown)}
                 className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 transition w-full"

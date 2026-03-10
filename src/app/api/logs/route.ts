@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
     const rows = await query<LogRow>(sql, params);
 
     return NextResponse.json({
-      data: rows.reverse(), // Return in chronological order
+      data: rows, // Return newest first
       count: rows.length,
     });
   } catch (error) {

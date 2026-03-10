@@ -4,7 +4,6 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Server,
   RefreshCw,
-  Filter,
   X,
   Pause,
   Play,
@@ -23,8 +22,6 @@ import {
   TrendingUp,
   Sparkles,
   Loader2,
-  Download,
-  Calendar,
   Activity,
 } from "lucide-react";
 import Link from "next/link";
@@ -612,9 +609,6 @@ export default function LogsPage() {
   const [fromTime, setFromTime] = useState<string>("");
   const [toTime, setToTime] = useState<string>("");
 
-  // Export state
-  const [exporting, setExporting] = useState(false);
-
   // SSE Streaming state
   const [useStreaming, setUseStreaming] = useState(false);
   const [streamConnected, setStreamConnected] = useState(false);
@@ -622,13 +616,6 @@ export default function LogsPage() {
 
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const lastLogIdRef = useRef<number>(0);
-  const shouldAutoScroll = useRef(true);
-
-  // Helper to format date for datetime-local input
-  const formatDateTimeLocal = (date: Date): string => {
-    const pad = (n: number) => n.toString().padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  };
 
   // Quick time presets
   const applyTimePreset = (preset: string) => {
@@ -652,44 +639,8 @@ export default function LogsPage() {
         return;
     }
     
-    setFromTime(formatDateTimeLocal(from));
-    setToTime(formatDateTimeLocal(now));
-  };
-
-  // Export logs as CSV
-  const exportLogs = async () => {
-    setExporting(true);
-    try {
-      const params = new URLSearchParams();
-      if (selectedServer) params.set("server", selectedServer);
-      if (selectedApp) params.set("app", selectedApp);
-      if (selectedLevel) params.set("level", selectedLevel);
-      if (debouncedSearch) params.set("search", debouncedSearch);
-      if (fromTime) params.set("from", new Date(fromTime).toISOString());
-      if (toTime) params.set("to", new Date(toTime).toISOString());
-
-      const res = await fetch(`/api/logs/export?${params.toString()}`);
-      
-      if (!res.ok) {
-        throw new Error("Export failed");
-      }
-
-      // Get the blob and download it
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `watchtower-logs-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (err) {
-      console.error("Failed to export logs:", err);
-      setError("Failed to export logs");
-    } finally {
-      setExporting(false);
-    }
+    setFromTime(from.toISOString());
+    setToTime(now.toISOString());
   };
 
   // Toggle log expansion
@@ -842,8 +793,9 @@ export default function LogsPage() {
               (log: LogEntry) => log.id > lastLogIdRef.current
             );
             if (newLogs.length > 0) {
-              const combined = [...prev, ...newLogs];
-              return combined.slice(-1000);
+              // Prepend new logs (newest at top)
+              const combined = [...newLogs, ...prev];
+              return combined.slice(0, 1000);
             }
             return prev;
           });
@@ -897,7 +849,8 @@ export default function LogsPage() {
       const json = await res.json();
 
       if (json.data && json.data.length > 0) {
-        setLogs((prev) => [...json.data, ...prev]);
+        // Append older logs (at bottom)
+        setLogs((prev) => [...prev, ...json.data]);
         const minId = Math.min(...json.data.map((l: LogEntry) => l.id));
         setOldestLogId(minId);
         setHasMore(json.data.length === 100);
@@ -960,10 +913,11 @@ export default function LogsPage() {
               (log: LogEntry) => log.id > lastLogIdRef.current
             );
             if (newLogs.length > 0) {
-              const combined = [...prev, ...newLogs];
+              // Prepend new logs (newest at top)
+              const combined = [...newLogs, ...prev];
               // Update last log ID
               lastLogIdRef.current = Math.max(...newLogs.map((l: LogEntry) => l.id));
-              return combined.slice(-1000);
+              return combined.slice(0, 1000);
             }
             return prev;
           });
@@ -996,18 +950,8 @@ export default function LogsPage() {
     return () => clearInterval(interval);
   }, [fetchLogs, paused, useStreaming]);
 
-  // Auto-scroll
-  useEffect(() => {
-    if (shouldAutoScroll.current && logsContainerRef.current) {
-      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
-    }
-  }, [logs]);
-
   const handleScroll = () => {
-    if (logsContainerRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = logsContainerRef.current;
-      shouldAutoScroll.current = scrollHeight - scrollTop - clientHeight < 100;
-    }
+    // Scroll handling if needed for future features
   };
 
   const clearFilters = () => {
@@ -1131,198 +1075,95 @@ export default function LogsPage() {
           </div>
         </div>
 
-        {/* Filters */}
+        {/* Filters - Single Row */}
         <div className="px-4 py-3 border-t border-gray-800 bg-gray-900/30">
-          <div className="flex flex-col gap-3">
-            {/* Filter row */}
-            <div className="flex flex-wrap items-center gap-2">
-              <Filter className="w-4 h-4 text-gray-500 hidden sm:block" />
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Server filter */}
+            <select
+              value={selectedServer}
+              onChange={(e) => {
+                setSelectedServer(e.target.value);
+                setSelectedApp("");
+              }}
+              className="px-2 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-sm focus:border-purple-500 focus:outline-none"
+            >
+              <option value="">All Servers</option>
+              {servers.map((server) => (
+                <option key={server.id} value={server.id}>
+                  {server.name}
+                </option>
+              ))}
+            </select>
 
-              {/* Server filter */}
-              <select
-                value={selectedServer}
-                onChange={(e) => {
-                  setSelectedServer(e.target.value);
-                  setSelectedApp("");
-                }}
-                className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-sm focus:border-purple-500 focus:outline-none min-w-[140px]"
-              >
-                <option value="">All Servers</option>
-                {servers.map((server) => (
-                  <option key={server.id} value={server.id}>
-                    {server.name}
-                  </option>
-                ))}
-              </select>
+            {/* App filter */}
+            <select
+              value={selectedApp}
+              onChange={(e) => setSelectedApp(e.target.value)}
+              className="px-2 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-sm focus:border-purple-500 focus:outline-none"
+            >
+              <option value="">All Apps</option>
+              {(selectedServer
+                ? filteredApps.map((a) => a.name)
+                : uniqueAppNames
+              ).map((appName) => (
+                <option key={appName} value={appName}>
+                  {appName}
+                </option>
+              ))}
+            </select>
 
-              {/* App filter */}
-              <select
-                value={selectedApp}
-                onChange={(e) => setSelectedApp(e.target.value)}
-                className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-sm focus:border-purple-500 focus:outline-none min-w-[140px]"
-              >
-                <option value="">All Apps</option>
-                {(selectedServer
-                  ? filteredApps.map((a) => a.name)
-                  : uniqueAppNames
-                ).map((appName) => (
-                  <option key={appName} value={appName}>
-                    {appName}
-                  </option>
-                ))}
-              </select>
+            {/* Level filter */}
+            <select
+              value={selectedLevel}
+              onChange={(e) => setSelectedLevel(e.target.value)}
+              className="px-2 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-sm focus:border-purple-500 focus:outline-none"
+            >
+              <option value="">All Levels</option>
+              <option value="error">🔴 Error</option>
+              <option value="warn">🟡 Warning</option>
+              <option value="info">🔵 Info</option>
+              <option value="debug">⚪ Debug</option>
+            </select>
 
-              {/* Level filter */}
-              <select
-                value={selectedLevel}
-                onChange={(e) => setSelectedLevel(e.target.value)}
-                className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-sm focus:border-purple-500 focus:outline-none min-w-[120px]"
-              >
-                <option value="">All Levels</option>
-                <option value="error">🔴 Error</option>
-                <option value="warn">🟡 Warning</option>
-                <option value="info">🔵 Info</option>
-                <option value="debug">⚪ Debug</option>
-              </select>
-
-              {hasFilters && (
+            {/* Quick time presets */}
+            <div className="flex items-center gap-1 border-l border-gray-700 pl-2 ml-1">
+              {[
+                { key: "1h", label: "1h" },
+                { key: "6h", label: "6h" },
+                { key: "24h", label: "24h" },
+                { key: "7d", label: "7d" },
+              ].map(({ key, label }) => (
                 <button
-                  onClick={clearFilters}
-                  className="flex items-center gap-1 px-3 py-2 rounded-lg bg-red-900/50 hover:bg-red-900 text-red-400 text-sm transition"
+                  key={key}
+                  onClick={() => applyTimePreset(key)}
+                  className="px-2 py-1 text-xs rounded bg-gray-800 hover:bg-gray-700 text-gray-300 transition"
                 >
-                  <X className="w-3 h-3" />
-                  Clear
+                  {label}
                 </button>
-              )}
-
-              {/* Export button */}
-              <button
-                onClick={exportLogs}
-                disabled={exporting}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm transition disabled:opacity-50 ml-auto"
-              >
-                {exporting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4" />
-                )}
-                <span className="hidden sm:inline">{exporting ? "Exporting..." : "Export CSV"}</span>
-              </button>
+              ))}
             </div>
 
-            {/* Time Range row */}
-            <div className="flex flex-wrap items-center gap-2">
-              <Calendar className="w-4 h-4 text-gray-500 hidden sm:block" />
-              
-              {/* From */}
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-gray-500">From:</span>
-                <input
-                  type="datetime-local"
-                  value={fromTime}
-                  onChange={(e) => setFromTime(e.target.value)}
-                  className="px-2 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-sm focus:border-purple-500 focus:outline-none"
-                />
-              </div>
-
-              {/* To */}
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-gray-500">To:</span>
-                <input
-                  type="datetime-local"
-                  value={toTime}
-                  onChange={(e) => setToTime(e.target.value)}
-                  className="px-2 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-sm focus:border-purple-500 focus:outline-none"
-                />
-              </div>
-
-              {/* Quick presets */}
-              <div className="flex items-center gap-1 ml-2">
-                <span className="text-xs text-gray-500 hidden sm:inline">Quick:</span>
-                {[
-                  { key: "1h", label: "1h" },
-                  { key: "6h", label: "6h" },
-                  { key: "24h", label: "24h" },
-                  { key: "7d", label: "7d" },
-                ].map(({ key, label }) => (
-                  <button
-                    key={key}
-                    onClick={() => applyTimePreset(key)}
-                    className="px-2 py-1 text-xs rounded bg-gray-800 hover:bg-gray-700 text-gray-300 transition"
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Clear time filters */}
-              {(fromTime || toTime) && (
-                <button
-                  onClick={() => { setFromTime(""); setToTime(""); }}
-                  className="px-2 py-1 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-400 transition"
-                >
-                  Clear time
-                </button>
-              )}
-            </div>
-
-            {/* Search row */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            {/* Search */}
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
               <input
                 type="text"
-                placeholder="Search log messages..."
+                placeholder="Search..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-800 border border-gray-700 text-sm focus:border-purple-500 focus:outline-none"
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-sm focus:border-purple-500 focus:outline-none"
               />
             </div>
 
-            {/* Active filters summary */}
+            {/* Clear filters */}
             {hasFilters && (
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-gray-500">Active filters:</span>
-                {selectedServer && (
-                  <span className="px-2 py-1 rounded bg-purple-900/50 text-purple-300">
-                    Server: {servers.find((s) => s.id === selectedServer)?.name}
-                  </span>
-                )}
-                {selectedApp && (
-                  <span className="px-2 py-1 rounded bg-blue-900/50 text-blue-300">
-                    App: {selectedApp}
-                  </span>
-                )}
-                {selectedLevel && (
-                  <span
-                    className={`px-2 py-1 rounded ${
-                      selectedLevel === "error"
-                        ? "bg-red-900/50 text-red-300"
-                        : selectedLevel === "warn"
-                        ? "bg-yellow-900/50 text-yellow-300"
-                        : selectedLevel === "info"
-                        ? "bg-blue-900/50 text-blue-300"
-                        : "bg-gray-700 text-gray-300"
-                    }`}
-                  >
-                    Level: {selectedLevel}
-                  </span>
-                )}
-                {debouncedSearch && (
-                  <span className="px-2 py-1 rounded bg-gray-700 text-gray-300">
-                    Search: &quot;{debouncedSearch}&quot;
-                  </span>
-                )}
-                {fromTime && (
-                  <span className="px-2 py-1 rounded bg-green-900/50 text-green-300">
-                    From: {new Date(fromTime).toLocaleString()}
-                  </span>
-                )}
-                {toTime && (
-                  <span className="px-2 py-1 rounded bg-green-900/50 text-green-300">
-                    To: {new Date(toTime).toLocaleString()}
-                  </span>
-                )}
-              </div>
+              <button
+                onClick={clearFilters}
+                className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-red-900/50 hover:bg-red-900 text-red-400 text-sm transition"
+              >
+                <X className="w-3 h-3" />
+                Clear
+              </button>
             )}
           </div>
         </div>
@@ -1380,26 +1221,6 @@ export default function LogsPage() {
           </div>
         ) : (
           <div className="space-y-1">
-            {/* Load More (older logs) button at top */}
-            {hasMore && logs.length > 0 && (
-              <button
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="w-full py-3 mb-4 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 flex items-center justify-center gap-2 transition disabled:opacity-50"
-              >
-                {loadingMore ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Loading older logs...
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="w-4 h-4 rotate-180" />
-                    Load older logs
-                  </>
-                )}
-              </button>
-            )}
             {(() => {
               const groupedLogs = groupLogs(logs);
               let lastDate = "";
@@ -1456,6 +1277,27 @@ export default function LogsPage() {
                 );
               });
             })()}
+            
+            {/* Load More (older logs) button at bottom */}
+            {hasMore && logs.length > 0 && (
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="w-full py-3 mt-4 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 flex items-center justify-center gap-2 transition disabled:opacity-50"
+              >
+                {loadingMore ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Loading older logs...
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-4 h-4" />
+                    Load older logs
+                  </>
+                )}
+              </button>
+            )}
           </div>
         )}
       </div>
