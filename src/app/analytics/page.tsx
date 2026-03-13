@@ -278,7 +278,8 @@ function AnalyticsContent() {
                     {servers.map((server) => (
                       <button
                         key={server.id}
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setSelectedServer(server.id);
                           setShowServerDropdown(false);
                         }}
@@ -361,10 +362,11 @@ function AnalyticsContent() {
                   {servers.map((server) => (
                     <button
                       key={server.id}
-                      onClick={() => {
-                        setSelectedServer(server.id);
-                        setShowServerDropdown(false);
-                      }}
+                      onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedServer(server.id);
+                          setShowServerDropdown(false);
+                        }}
                       className={`w-full px-4 py-3 text-left hover:bg-gray-700 active:bg-gray-600 transition flex items-center gap-3 ${
                         server.id === selectedServer ? "bg-gray-700" : ""
                       }`}
