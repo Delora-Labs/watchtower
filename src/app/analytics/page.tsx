@@ -274,7 +274,7 @@ function AnalyticsContent() {
                 </button>
                 
                 {showServerDropdown && (
-                  <div className="absolute top-full mt-2 right-0 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-20">
+                  <div className="absolute top-full mt-2 right-0 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
                     {servers.map((server) => (
                       <button
                         key={server.id}
@@ -358,7 +358,7 @@ function AnalyticsContent() {
               </button>
               
               {showServerDropdown && (
-                <div className="absolute top-full mt-2 left-0 right-0 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-20 max-h-64 overflow-y-auto">
+                <div className="absolute top-full mt-2 left-0 right-0 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50 max-h-64 overflow-y-auto">
                   {servers.map((server) => (
                     <button
                       key={server.id}
@@ -665,7 +665,7 @@ function AnalyticsContent() {
       {/* Click outside to close dropdown */}
       {showServerDropdown && (
         <div 
-          className="fixed inset-0 z-10" 
+          className="fixed inset-0 z-0" 
           onClick={() => setShowServerDropdown(false)}
         />
       )}
