@@ -595,6 +595,7 @@ export default function LogsPage() {
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisTimeRange, setAnalysisTimeRange] = useState("1h");
+  const [activeTimePreset, setActiveTimePreset] = useState<string | null>(null);
 
   // Filters
   const [servers, setServers] = useState<ServerOption[]>([]);
@@ -641,6 +642,7 @@ export default function LogsPage() {
     
     setFromTime(from.toISOString());
     setToTime(now.toISOString());
+    setActiveTimePreset(preset);
   };
 
   // Toggle log expansion
@@ -1136,7 +1138,11 @@ export default function LogsPage() {
                 <button
                   key={key}
                   onClick={() => applyTimePreset(key)}
-                  className="px-2 py-1 text-xs rounded bg-gray-800 hover:bg-gray-700 text-gray-300 transition"
+                  className={`px-2 py-1 text-xs rounded transition font-medium ${
+                    activeTimePreset === key
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-800 hover:bg-gray-700 text-gray-300"
+                  }`}
                 >
                   {label}
                 </button>
