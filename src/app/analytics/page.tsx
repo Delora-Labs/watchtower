@@ -154,16 +154,19 @@ function AnalyticsContent() {
         setServers(json.data);
         // Set initial server from URL or first server
         const urlServerId = searchParams.get("server");
-        if (urlServerId && json.data.find((s: ServerInfo) => s.id === urlServerId)) {
-          setSelectedServer(urlServerId);
-        } else if (json.data.length > 0 && !selectedServer) {
-          setSelectedServer(json.data[0].id);
-        }
+        // Only set initial server, don't override user selection
+        setSelectedServer(prev => {
+          if (prev) return prev; // Keep existing selection
+          if (urlServerId && json.data.find((s: ServerInfo) => s.id === urlServerId)) {
+            return urlServerId;
+          }
+          return json.data.length > 0 ? json.data[0].id : null;
+        });
       }
     } catch {
       setError("Failed to fetch servers");
     }
-  }, [searchParams, selectedServer]);
+  }, [searchParams]);
 
   // Fetch metrics for selected server
   const fetchMetrics = useCallback(async () => {
