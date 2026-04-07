@@ -41,7 +41,21 @@ export async function GET(request: NextRequest) {
       controller.enqueue(
         encoder.encode(`data: ${JSON.stringify({ type: "connected", lastLogId })}\n\n`)
       );
-      
+
+      // Maximum connection duration: 5 minutes. Client should reconnect after close.
+      const MAX_CONNECTION_MS = 5 * 60 * 1000;
+      const connectionTimeout = setTimeout(() => {
+        clearInterval(pollInterval);
+        try {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: "timeout", message: "Connection duration limit reached. Please reconnect." })}\n\n`)
+          );
+          controller.close();
+        } catch {
+          // Controller may already be closed
+        }
+      }, MAX_CONNECTION_MS);
+
       // Poll for new logs every 500ms
       const pollInterval = setInterval(async () => {
         try {
@@ -105,7 +119,12 @@ export async function GET(request: NextRequest) {
       // Clean up on close
       request.signal.addEventListener("abort", () => {
         clearInterval(pollInterval);
-        controller.close();
+        clearTimeout(connectionTimeout);
+        try {
+          controller.close();
+        } catch {
+          // Controller may already be closed
+        }
       });
     },
   });

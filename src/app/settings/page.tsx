@@ -68,6 +68,7 @@ function GeneralSettings({ teams, users, isAdmin, currentUser }: { teams: Team[]
   const [showTokenInput, setShowTokenInput] = useState(false);
 
   const canDeploy = currentUser?.role === "system_admin" || currentUser?.role === "team_lead";
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/settings")
@@ -77,8 +78,10 @@ function GeneralSettings({ teams, users, isAdmin, currentUser }: { teams: Team[]
           setDefaultWebhook(json.data.default_teams_webhook);
         }
       })
-      .catch(() => {});
-    
+      .catch(() => {
+        setSettingsError("Failed to load settings. Please try refreshing the page.");
+      });
+
     // Fetch GitHub token status (only if user can deploy)
     if (canDeploy) {
       fetch("/api/auth/token")
@@ -87,7 +90,9 @@ function GeneralSettings({ teams, users, isAdmin, currentUser }: { teams: Team[]
           setHasToken(json.hasToken);
           setMaskedToken(json.maskedToken);
         })
-        .catch(() => {});
+        .catch(() => {
+          setSettingsError("Failed to load GitHub token status.");
+        });
     }
   }, [canDeploy]);
 
@@ -162,6 +167,15 @@ function GeneralSettings({ teams, users, isAdmin, currentUser }: { teams: Team[]
 
   return (
     <div className="space-y-6">
+      {settingsError && (
+        <div className="p-4 rounded-lg bg-red-900/50 border border-red-700 flex items-center gap-2 text-sm">
+          <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+          <span className="flex-1">{settingsError}</span>
+          <button onClick={() => setSettingsError(null)} className="p-1 hover:bg-red-800/50 rounded">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       {/* Profile Info - visible to all */}
       <div className="rounded-xl bg-gray-900 border border-gray-800 p-6">
         <h2 className="text-lg font-bold mb-4">My Profile</h2>

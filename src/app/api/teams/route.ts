@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, execute } from "@/lib/db";
 import { generateId } from "@/lib/utils";
+import { getUserFromSession, canManageTeams } from "@/lib/auth";
 
 interface Team {
   id: string;
@@ -13,6 +14,11 @@ interface Team {
 
 // GET all teams
 export async function GET() {
+  const user = await getUserFromSession();
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
   try {
     const teams = await query<Team>(
       "SELECT * FROM teams ORDER BY name"
@@ -27,6 +33,15 @@ export async function GET() {
 
 // POST create new team
 export async function POST(request: NextRequest) {
+  const user = await getUserFromSession();
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  if (!canManageTeams(user.role)) {
+    return NextResponse.json({ error: "Only system admins can create teams" }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
     const { name, teams_webhook_url } = body;

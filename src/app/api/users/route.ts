@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, execute } from "@/lib/db";
 import { generateId } from "@/lib/utils";
-import { hashPassword, getUserFromSession, canViewAllApps, getUserTeamIds } from "@/lib/auth";
+import { hashPassword, getUserFromSession, canViewAllApps, canManageUsers, getUserTeamIds } from "@/lib/auth";
 import crypto from "crypto";
 
 interface User {
@@ -19,7 +19,10 @@ interface User {
 export async function GET() {
   try {
     const currentUser = await getUserFromSession();
-    
+    if (!currentUser) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     // Get all users with their team memberships
     const users = await query<User & { team_id: string | null }>(
       `SELECT u.id, u.email, u.name, u.role, u.is_active, u.created_at, u.updated_at,
@@ -37,7 +40,7 @@ export async function GET() {
     }));
 
     // Filter users by team for non-admins
-    if (currentUser && !canViewAllApps(currentUser.role)) {
+    if (!canViewAllApps(currentUser.role)) {
       const myTeamIds = await getUserTeamIds(currentUser.id);
       const filteredUsers = usersWithTeams.filter(u => 
         u.team_ids.some(tid => myTeamIds.includes(tid)) || u.id === currentUser.id
@@ -54,6 +57,15 @@ export async function GET() {
 
 // POST create/invite new user
 export async function POST(request: NextRequest) {
+  const currentUser = await getUserFromSession();
+  if (!currentUser) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  if (!canManageUsers(currentUser.role)) {
+    return NextResponse.json({ error: "Only system admins can create users" }, { status: 403 });
+  }
+
   try {
     const body = await request.json();
     const { email, name, role = "user", teamId } = body;

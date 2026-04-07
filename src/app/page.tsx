@@ -799,6 +799,20 @@ export default function Dashboard() {
   // Delete app modal state
   const [deleteAppConfirm, setDeleteAppConfirm] = useState<App | null>(null);
   const [deletingApp, setDeletingApp] = useState(false);
+  const [deployMessage, setDeployMessage] = useState<string | null>(null);
+
+  // Refs for stable interval callbacks
+  const fetchServersRef = useRef<() => Promise<void>>();
+  const fetchTeamsRef = useRef<() => Promise<void>>();
+  const fetchHealthChecksRef = useRef<() => Promise<void>>();
+  const fetchUserRef = useRef<() => Promise<void>>();
+
+  // Refs for orphaned timeout cleanup
+  const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const restartClearTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const commandRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const commandClearTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const deployMessageTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchTeams = useCallback(async () => {
     try {
@@ -894,17 +908,35 @@ export default function Dashboard() {
     return { online, stopped, errored, total: apps.length };
   };
 
+  // Keep refs pointing to latest versions of fetch functions
+  fetchServersRef.current = fetchServers;
+  fetchTeamsRef.current = fetchTeams;
+  fetchHealthChecksRef.current = fetchHealthChecks;
+  fetchUserRef.current = fetchUser;
+
   useEffect(() => {
-    fetchServers();
-    fetchTeams();
-    fetchHealthChecks();
-    fetchUser();
+    fetchServersRef.current?.();
+    fetchTeamsRef.current?.();
+    fetchHealthChecksRef.current?.();
+    fetchUserRef.current?.();
     const interval = setInterval(() => {
-      fetchServers();
-      fetchHealthChecks();
+      fetchServersRef.current?.();
+      fetchHealthChecksRef.current?.();
     }, 10000);
     return () => clearInterval(interval);
-  }, [fetchServers, fetchTeams, fetchHealthChecks]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Cleanup orphaned timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
+      if (restartClearTimeoutRef.current) clearTimeout(restartClearTimeoutRef.current);
+      if (commandRefreshTimeoutRef.current) clearTimeout(commandRefreshTimeoutRef.current);
+      if (commandClearTimeoutRef.current) clearTimeout(commandClearTimeoutRef.current);
+      if (deployMessageTimeoutRef.current) clearTimeout(deployMessageTimeoutRef.current);
+    };
+  }, []);
 
   const addServer = async () => {
     if (!newServerName.trim()) return;
@@ -1146,11 +1178,13 @@ export default function Dashboard() {
         body: JSON.stringify({ appName }),
       });
       // Wait a bit then refresh
-      setTimeout(fetchServers, 2000);
+      if (restartTimeoutRef.current) clearTimeout(restartTimeoutRef.current);
+      restartTimeoutRef.current = setTimeout(() => fetchServersRef.current?.(), 2000);
     } catch {
       setError("Failed to restart app");
     } finally {
-      setTimeout(() => setRestartingApp(null), 3000);
+      if (restartClearTimeoutRef.current) clearTimeout(restartClearTimeoutRef.current);
+      restartClearTimeoutRef.current = setTimeout(() => setRestartingApp(null), 3000);
     }
   };
 
@@ -1184,7 +1218,9 @@ export default function Dashboard() {
             setError(json.error);
           } else {
             // Show success message briefly
-            alert(`Deploy queued for ${appName}. Check logs for progress.`);
+            setDeployMessage(`Deploy queued for ${appName}. Check logs for progress.`);
+            if (deployMessageTimeoutRef.current) clearTimeout(deployMessageTimeoutRef.current);
+            deployMessageTimeoutRef.current = setTimeout(() => setDeployMessage(null), 3000);
           }
         }
       } else {
@@ -1196,12 +1232,14 @@ export default function Dashboard() {
       }
       // Longer timeout for deploy actions
       const timeout = ["pull", "install", "build", "deploy"].includes(action) ? 10000 : 2000;
-      setTimeout(fetchServers, timeout);
+      if (commandRefreshTimeoutRef.current) clearTimeout(commandRefreshTimeoutRef.current);
+      commandRefreshTimeoutRef.current = setTimeout(() => fetchServersRef.current?.(), timeout);
     } catch {
       setError(`Failed to ${action} app`);
     } finally {
-      const clearTimeout = ["pull", "install", "build", "deploy"].includes(action) ? 30000 : 3000;
-      setTimeout(() => setActionInProgress(null), clearTimeout);
+      const clearDelay = ["pull", "install", "build", "deploy"].includes(action) ? 30000 : 3000;
+      if (commandClearTimeoutRef.current) clearTimeout(commandClearTimeoutRef.current);
+      commandClearTimeoutRef.current = setTimeout(() => setActionInProgress(null), clearDelay);
     }
   };
 
@@ -1414,6 +1452,16 @@ export default function Dashboard() {
             <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
             <span className="flex-1 text-sm md:text-base">{error}</span>
             <button onClick={() => setError(null)} className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+
+        {deployMessage && (
+          <div className="mb-4 p-3 md:p-4 rounded-lg bg-green-900/50 border border-green-700 flex items-center gap-2">
+            <Rocket className="w-5 h-5 text-green-400 flex-shrink-0" />
+            <span className="flex-1 text-sm md:text-base">{deployMessage}</span>
+            <button onClick={() => setDeployMessage(null)} className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center">
               <X className="w-5 h-5" />
             </button>
           </div>

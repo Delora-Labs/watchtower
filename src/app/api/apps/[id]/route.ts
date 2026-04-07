@@ -25,6 +25,11 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getUserFromSession();
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
   try {
     const { id } = await params;
     
@@ -59,6 +64,16 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getUserFromSession();
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
+  // Only system_admin and team_lead can update apps
+  if (user.role !== "system_admin" && user.role !== "team_lead") {
+    return NextResponse.json({ error: "Only admins and team leads can update apps" }, { status: 403 });
+  }
+
   try {
     const { id } = await params;
     const body = await request.json();

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { query, queryOne, execute } from "./db";
 import bcrypt from "bcryptjs";
@@ -45,20 +46,11 @@ export interface Session {
 }
 
 function generateToken(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let token = "";
-  for (let i = 0; i < 64; i++) {
-    token += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return token;
+  return crypto.randomBytes(32).toString("hex");
 }
 
 function generateUUID(): string {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  return crypto.randomUUID();
 }
 
 export async function validateCredentials(

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { execute, queryOne } from "@/lib/db";
+import { getUserFromSession } from "@/lib/auth";
 
 interface HealthCheck {
   id: string;
@@ -20,6 +21,11 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getUserFromSession();
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
   try {
     const { id } = await params;
     const healthCheck = await queryOne<HealthCheck>(
@@ -49,6 +55,11 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getUserFromSession();
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
   try {
     const { id } = await params;
     const body = await request.json();
@@ -142,6 +153,11 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await getUserFromSession();
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
   try {
     const { id } = await params;
 

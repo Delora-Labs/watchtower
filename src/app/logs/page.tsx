@@ -617,6 +617,7 @@ export default function LogsPage() {
 
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const lastLogIdRef = useRef<number>(0);
+  const logsRef = useRef<LogEntry[]>([]);
 
   // Quick time presets
   const applyTimePreset = (preset: string) => {
@@ -706,11 +707,15 @@ export default function LogsPage() {
     fetchStats();
   }, [fetchStats]);
 
+  // Ref for stable stats polling
+  const fetchStatsRef = useRef(fetchStats);
+  fetchStatsRef.current = fetchStats;
+
   // Refresh stats every 30 seconds
   useEffect(() => {
-    const interval = setInterval(fetchStats, 30000);
+    const interval = setInterval(() => fetchStatsRef.current(), 30000);
     return () => clearInterval(interval);
-  }, [fetchStats]);
+  }, []);
 
   // Debounce search input
   useEffect(() => {
@@ -773,7 +778,7 @@ export default function LogsPage() {
 
         // For polling, only get logs after the last one we have
         if (isPolling && lastLogIdRef.current > 0) {
-          const lastLog = logs[logs.length - 1];
+          const lastLog = logsRef.current[logsRef.current.length - 1];
           if (lastLog) {
             params.set("after", lastLog.timestamp);
           }
@@ -830,7 +835,10 @@ export default function LogsPage() {
         }
       }
     },
-    [selectedServer, selectedApp, selectedLevel, debouncedSearch, fromTime, toTime, paused, logs]
+    // Note: `logs` intentionally excluded — we use functional state updates (setLogs(prev => ...))
+    // and lastLogIdRef to avoid infinite callback recreations.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedServer, selectedApp, selectedLevel, debouncedSearch, fromTime, toTime, paused]
   );
 
   // Load more (older logs)
@@ -865,6 +873,9 @@ export default function LogsPage() {
       setLoadingMore(false);
     }
   };
+
+  // Keep logsRef in sync with logs state for use in callbacks without stale closures
+  logsRef.current = logs;
 
   // Initial load and when filters change
   useEffect(() => {

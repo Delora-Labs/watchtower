@@ -27,7 +27,11 @@ export async function GET() {
     
     let checks: HealthCheckRow[];
     
-    if (!user || canViewAllApps(user.role)) {
+    if (!user) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    if (canViewAllApps(user.role)) {
       // System admin sees all health checks
       checks = await query<HealthCheckRow>(`
         SELECT 
@@ -112,6 +116,11 @@ export async function GET() {
 
 // POST /api/health-checks - Create a new health check
 export async function POST(request: NextRequest) {
+  const user = await getUserFromSession();
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const { name, url, method, expected_status, timeout_ms, interval_ms, headers, enabled } = body;
@@ -121,6 +130,55 @@ export async function POST(request: NextRequest) {
         { error: "name and url are required" },
         { status: 400 }
       );
+    }
+
+    // Validate URL
+    try {
+      const parsed = new URL(url);
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        return NextResponse.json(
+          { error: "url must use http or https protocol" },
+          { status: 400 }
+        );
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "url must be a valid URL" },
+        { status: 400 }
+      );
+    }
+
+    // Validate timeout_ms (1 - 60000)
+    if (timeout_ms !== undefined) {
+      const t = Number(timeout_ms);
+      if (!Number.isInteger(t) || t < 1 || t > 60000) {
+        return NextResponse.json(
+          { error: "timeout_ms must be an integer between 1 and 60000" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate interval_ms (10000 - 86400000)
+    if (interval_ms !== undefined) {
+      const i = Number(interval_ms);
+      if (!Number.isInteger(i) || i < 10000 || i > 86400000) {
+        return NextResponse.json(
+          { error: "interval_ms must be an integer between 10000 and 86400000" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validate expected_status (100 - 599)
+    if (expected_status !== undefined) {
+      const s = Number(expected_status);
+      if (!Number.isInteger(s) || s < 100 || s > 599) {
+        return NextResponse.json(
+          { error: "expected_status must be an integer between 100 and 599" },
+          { status: 400 }
+        );
+      }
     }
 
     const id = generateId();

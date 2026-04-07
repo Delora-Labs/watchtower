@@ -63,9 +63,20 @@ export async function POST(
 
     const githubToken = userWithToken?.github_token || null;
 
+    // Validate pm2_name to prevent shell injection
+    const SAFE_NAME_PATTERN = /^[a-zA-Z0-9_\-\.]+$/;
+    if (!SAFE_NAME_PATTERN.test(app.pm2_name)) {
+      return NextResponse.json(
+        { error: "Invalid app name: contains disallowed characters" },
+        { status: 400 }
+      );
+    }
+
     // Build the deploy command
     // The command will be executed in the app's directory (derived from pm2 cwd)
     const deployScript = `
+trap 'rm -f ~/.git-credentials-temp' EXIT
+
 cd "$(pm2 describe ${app.pm2_name} 2>/dev/null | grep 'exec cwd' | awk '{print $NF}')" 2>/dev/null || cd ~/workspace/${app.pm2_name} || exit 1
 
 echo "=== Starting deploy for ${app.pm2_name} ==="
@@ -73,10 +84,10 @@ echo "Directory: $(pwd)"
 
 # Configure git with token if provided
 ${githubToken ? `
-git config credential.helper store
-echo "https://oauth2:${githubToken}@github.com" > ~/.git-credentials-temp
+touch ~/.git-credentials-temp
+chmod 600 ~/.git-credentials-temp
+echo "https://oauth2:${githubToken.replace(/'/g, "'\\''")}@github.com" > ~/.git-credentials-temp
 git -c credential.helper='store --file ~/.git-credentials-temp' pull
-rm -f ~/.git-credentials-temp
 ` : 'git pull'}
 
 echo "=== Installing dependencies ==="

@@ -1,4 +1,5 @@
 import { query, execute, queryOne } from "./db";
+// Note: `query` is used for batch-fetching apps to avoid N+1 queries
 import { generateId } from "./utils";
 
 interface App {
@@ -22,14 +23,22 @@ export async function processAlerts(
   serverName: string,
   apps: Array<{ name: string; status: string; pm2_id: number }>
 ) {
+  // Fetch all apps for this server in a single query to avoid N+1
+  const appNames = apps.map((a) => a.name);
+  if (appNames.length === 0) return;
+
+  const placeholders = appNames.map(() => "?").join(",");
+  const dbApps = await query<App>(
+    `SELECT a.id, a.pm2_name, a.display_name, a.url, a.status, a.server_id
+     FROM apps a
+     WHERE a.server_id = ? AND a.pm2_name IN (${placeholders})`,
+    [serverId, ...appNames]
+  );
+
+  const dbAppsByName = new Map(dbApps.map((a) => [a.pm2_name, a]));
+
   for (const app of apps) {
-    // Get current app from DB
-    const dbApp = await queryOne<App>(
-      `SELECT a.id, a.pm2_name, a.display_name, a.url, a.status, a.server_id
-       FROM apps a
-       WHERE a.server_id = ? AND a.pm2_name = ?`,
-      [serverId, app.name]
-    );
+    const dbApp = dbAppsByName.get(app.name);
 
     if (!dbApp) continue;
 

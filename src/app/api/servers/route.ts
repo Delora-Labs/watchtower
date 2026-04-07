@@ -44,8 +44,12 @@ export async function GET() {
     
     let apps: AppRow[];
     
-    if (!user || canViewAllApps(user.role)) {
-      // System admin or unauthenticated (agent API) sees all apps with 5-min averages
+    if (!user) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    if (canViewAllApps(user.role)) {
+      // System admin sees all apps with 5-min averages
       apps = await query<AppRow>(`
         SELECT 
           a.id, a.server_id, a.pm2_id, a.pm2_name, a.display_name, a.url, a.category,

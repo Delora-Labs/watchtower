@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -218,14 +218,20 @@ function AnalyticsContent() {
     fetchAppStats();
   }, [fetchMetrics, fetchAppStats]);
 
+  // Refs for stable interval callbacks
+  const fetchMetricsRef = useRef(fetchMetrics);
+  fetchMetricsRef.current = fetchMetrics;
+  const fetchAppStatsRef = useRef(fetchAppStats);
+  fetchAppStatsRef.current = fetchAppStats;
+
   // Auto-refresh every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchMetrics();
-      fetchAppStats();
+      fetchMetricsRef.current();
+      fetchAppStatsRef.current();
     }, 30000);
     return () => clearInterval(interval);
-  }, [fetchMetrics, fetchAppStats]);
+  }, []);
 
   // Update URL when server changes
   useEffect(() => {
