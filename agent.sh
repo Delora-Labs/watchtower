@@ -49,6 +49,11 @@ send_logs() {
       if echo "$CLEAN_LINE" | grep -qE '^PM2[[:space:]]+\|'; then
         continue
       fi
+
+      # Skip noisy Next.js Server Action errors (stale deployment cache)
+      if echo "$CLEAN_LINE" | grep -qE 'Failed to find Server Action'; then
+        continue
+      fi
       
       # Try to extract app name - PM2 format is: "ID|appname   | message"
       # Using awk for more reliable parsing

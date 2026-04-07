@@ -55,7 +55,12 @@ send_logs() {
     if echo "$CLEAN_LINE" | grep -qE '^PM2[[:space:]]+\|'; then
       continue
     fi
-    
+
+    # Skip noisy Next.js Server Action errors (stale deployment cache)
+    if echo "$CLEAN_LINE" | grep -qE 'Failed to find Server Action'; then
+      continue
+    fi
+
     if echo "$CLEAN_LINE" | grep -qE '^[0-9]+\|'; then
       APP_NAME=$(echo "$CLEAN_LINE" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}')
       MESSAGE=$(echo "$CLEAN_LINE" | awk -F'|' '{$1=""; $2=""; gsub(/^[ \t|]+/, ""); print}')
