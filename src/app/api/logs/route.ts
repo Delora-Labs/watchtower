@@ -134,10 +134,16 @@ export async function POST(request: NextRequest) {
       existingHashes = new Set(existing.map((r) => r.hash));
     }
 
-    // Filter out duplicates
+    // Filter out duplicates and noisy logs
+    const NOISE_PATTERNS = [
+      /Failed to find Server Action/i,
+    ];
+
     const newLogs = logs.filter((log) => {
       if (!log.hash) return true; // No hash = always insert
-      return !existingHashes.has(log.hash);
+      if (existingHashes.has(log.hash)) return false;
+      if (log.message && NOISE_PATTERNS.some((p) => p.test(log.message))) return false;
+      return true;
     });
 
     const skipped = logs.length - newLogs.length;
