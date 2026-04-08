@@ -50,16 +50,12 @@ export async function GET() {
           r.response_time_ms as latest_response_time_ms,
           r.checked_at as latest_checked_at
         FROM health_checks hc
-        LEFT JOIN (
-          SELECT health_check_id, status, response_time_ms, checked_at
-          FROM health_check_results r1
-          WHERE checked_at = (
-            SELECT MAX(checked_at) 
-            FROM health_check_results r2 
-            WHERE r2.health_check_id = r1.health_check_id
-          )
-        ) r ON r.health_check_id = hc.id
-        ORDER BY 
+        LEFT JOIN health_check_results r ON r.id = (
+          SELECT r2.id FROM health_check_results r2
+          WHERE r2.health_check_id = hc.id
+          ORDER BY r2.checked_at DESC LIMIT 1
+        )
+        ORDER BY
           CASE WHEN r.status = 'down' THEN 0 ELSE 1 END,
           hc.name
       `);
@@ -71,7 +67,7 @@ export async function GET() {
       } else {
         const placeholders = teamIds.map(() => "?").join(",");
         checks = await query<HealthCheckRow>(`
-          SELECT 
+          SELECT
             hc.id,
             hc.name,
             hc.url,
@@ -87,17 +83,13 @@ export async function GET() {
             r.response_time_ms as latest_response_time_ms,
             r.checked_at as latest_checked_at
           FROM health_checks hc
-          LEFT JOIN (
-            SELECT health_check_id, status, response_time_ms, checked_at
-            FROM health_check_results r1
-            WHERE checked_at = (
-              SELECT MAX(checked_at) 
-              FROM health_check_results r2 
-              WHERE r2.health_check_id = r1.health_check_id
-            )
-          ) r ON r.health_check_id = hc.id
+          LEFT JOIN health_check_results r ON r.id = (
+            SELECT r2.id FROM health_check_results r2
+            WHERE r2.health_check_id = hc.id
+            ORDER BY r2.checked_at DESC LIMIT 1
+          )
           WHERE hc.team_id IN (${placeholders})
-          ORDER BY 
+          ORDER BY
             CASE WHEN r.status = 'down' THEN 0 ELSE 1 END,
             hc.name
         `, teamIds);

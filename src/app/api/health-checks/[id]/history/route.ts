@@ -56,34 +56,45 @@ export async function GET(
        WHERE health_check_id = ?
          AND checked_at > DATE_SUB(NOW(), INTERVAL ? DAY)
        ORDER BY checked_at DESC
-       LIMIT 1000`,
+       LIMIT 100`,
       [id, days]
     );
 
-    // Calculate uptime stats for different periods (7, 30, 90 days)
+    // Calculate uptime stats — single scan with conditional aggregation
     const uptimeStats = await query<UptimeStats>(`
-      SELECT 
-        CASE 
-          WHEN checked_at > DATE_SUB(NOW(), INTERVAL 7 DAY) THEN '7d'
-          WHEN checked_at > DATE_SUB(NOW(), INTERVAL 30 DAY) THEN '30d'
-          ELSE '90d'
-        END as period,
-        COUNT(*) as total_checks,
-        SUM(CASE WHEN status = 'up' THEN 1 ELSE 0 END) as up_checks,
-        SUM(CASE WHEN status = 'down' THEN 1 ELSE 0 END) as down_checks,
-        ROUND(SUM(CASE WHEN status = 'up' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) as uptime_percent,
-        ROUND(AVG(CASE WHEN status = 'up' THEN response_time_ms ELSE NULL END), 0) as avg_response_time_ms
-      FROM health_check_results
-      WHERE health_check_id = ?
-        AND checked_at > DATE_SUB(NOW(), INTERVAL 90 DAY)
-      GROUP BY CASE 
-        WHEN checked_at > DATE_SUB(NOW(), INTERVAL 7 DAY) THEN '7d'
-        WHEN checked_at > DATE_SUB(NOW(), INTERVAL 30 DAY) THEN '30d'
-        ELSE '90d'
-      END
-    `, [id]);
+      SELECT
+        period,
+        total_checks,
+        up_checks,
+        total_checks - up_checks as down_checks,
+        ROUND(up_checks * 100.0 / total_checks, 2) as uptime_percent,
+        avg_response_time_ms
+      FROM (
+        SELECT '7d' as period,
+          COUNT(*) as total_checks,
+          SUM(CASE WHEN status = 'up' THEN 1 ELSE 0 END) as up_checks,
+          ROUND(AVG(CASE WHEN status = 'up' THEN response_time_ms ELSE NULL END), 0) as avg_response_time_ms
+        FROM health_check_results
+        WHERE health_check_id = ? AND checked_at > DATE_SUB(NOW(), INTERVAL 7 DAY)
+        UNION ALL
+        SELECT '30d',
+          COUNT(*),
+          SUM(CASE WHEN status = 'up' THEN 1 ELSE 0 END),
+          ROUND(AVG(CASE WHEN status = 'up' THEN response_time_ms ELSE NULL END), 0)
+        FROM health_check_results
+        WHERE health_check_id = ? AND checked_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
+        UNION ALL
+        SELECT '90d',
+          COUNT(*),
+          SUM(CASE WHEN status = 'up' THEN 1 ELSE 0 END),
+          ROUND(AVG(CASE WHEN status = 'up' THEN response_time_ms ELSE NULL END), 0)
+        FROM health_check_results
+        WHERE health_check_id = ? AND checked_at > DATE_SUB(NOW(), INTERVAL 90 DAY)
+      ) stats
+      WHERE total_checks > 0
+    `, [id, id, id]);
 
-    // Aggregate data for charts (hourly for last 24h, daily for longer)
+    // Aggregate data for charts (hourly buckets)
     const chartData = await query<{
       time_bucket: string;
       avg_response_time: number;
@@ -91,11 +102,8 @@ export async function GET(
       down_count: number;
       total_count: number;
     }>(`
-      SELECT 
-        DATE_FORMAT(
-          DATE_SUB(checked_at, INTERVAL MINUTE(checked_at) % 60 MINUTE),
-          '%Y-%m-%d %H:00'
-        ) as time_bucket,
+      SELECT
+        DATE_FORMAT(checked_at, '%Y-%m-%d %H:00') as time_bucket,
         ROUND(AVG(CASE WHEN status = 'up' THEN response_time_ms ELSE NULL END), 0) as avg_response_time,
         SUM(CASE WHEN status = 'up' THEN 1 ELSE 0 END) as up_count,
         SUM(CASE WHEN status = 'down' THEN 1 ELSE 0 END) as down_count,
@@ -107,40 +115,30 @@ export async function GET(
       ORDER BY time_bucket ASC
     `, [id, days]);
 
-    // Get recent incidents (downtime events)
+    // Get recent incidents — simple approach: find consecutive down periods
     const incidents = await query<{
       started_at: string;
       ended_at: string | null;
       duration_minutes: number | null;
       error_message: string | null;
     }>(`
-      SELECT 
-        MIN(checked_at) as started_at,
-        MAX(checked_at) as ended_at,
-        TIMESTAMPDIFF(MINUTE, MIN(checked_at), MAX(checked_at)) as duration_minutes,
-        MAX(error_message) as error_message
-      FROM (
-        SELECT 
-          checked_at,
-          error_message,
-          @group := IF(status = 'down' AND @prev_status = 'up', @group + 1, @group) as incident_group,
-          @prev_status := status
-        FROM health_check_results,
-          (SELECT @group := 0, @prev_status := 'up') vars
-        WHERE health_check_id = ?
-          AND checked_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
-        ORDER BY checked_at ASC
-      ) grouped
-      WHERE @prev_status = 'down' OR (SELECT status FROM health_check_results WHERE health_check_id = ? ORDER BY checked_at DESC LIMIT 1) = 'down'
-      GROUP BY incident_group
-      HAVING COUNT(*) > 0
+      SELECT
+        MIN(r.checked_at) as started_at,
+        MAX(r.checked_at) as ended_at,
+        TIMESTAMPDIFF(MINUTE, MIN(r.checked_at), MAX(r.checked_at)) as duration_minutes,
+        MAX(r.error_message) as error_message
+      FROM health_check_results r
+      WHERE r.health_check_id = ?
+        AND r.status = 'down'
+        AND r.checked_at > DATE_SUB(NOW(), INTERVAL ? DAY)
+      GROUP BY DATE(r.checked_at), HOUR(r.checked_at)
       ORDER BY started_at DESC
       LIMIT 10
-    `, [id, id]);
+    `, [id, days]);
 
     return NextResponse.json({
       healthCheck: healthCheck[0],
-      results: results.slice(0, 100), // Latest 100 for detail view
+      results,
       uptimeStats,
       chartData,
       incidents,
