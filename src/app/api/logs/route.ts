@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
       /Failed to find Server Action/i,
     ];
 
-    const newLogs = logs.filter((log) => {
+    const filteredLogs = logs.filter((log) => {
       // Drop noisy logs regardless of hash
       if (log.message && NOISE_PATTERNS.some((p) => p.test(log.message))) return false;
       if (!log.hash) return true; // No hash = always insert
@@ -147,6 +147,28 @@ export async function POST(request: NextRequest) {
       return true;
     });
 
+    // Merge consecutive lines from the same app+server within 2 seconds into one log
+    const mergedLogs: typeof filteredLogs = [];
+    for (const log of filteredLogs) {
+      const prev = mergedLogs[mergedLogs.length - 1];
+      if (
+        prev &&
+        prev.server_id === log.server_id &&
+        prev.app_name === log.app_name &&
+        prev.level === log.level &&
+        Math.abs(
+          new Date(log.timestamp || 0).getTime() -
+            new Date(prev.timestamp || 0).getTime()
+        ) < 2000
+      ) {
+        prev.message = (prev.message || "") + "\n" + (log.message || "");
+        prev.hash = null; // Invalidate hash since message changed
+      } else {
+        mergedLogs.push({ ...log });
+      }
+    }
+
+    const newLogs = mergedLogs;
     const skipped = logs.length - newLogs.length;
 
     if (newLogs.length === 0) {
