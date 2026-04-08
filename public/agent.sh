@@ -67,9 +67,7 @@ send_logs() {
     [ -z "$(echo "$MESSAGE" | tr -d '[:space:]')" ] && continue
 
     # Skip watchtower agent's own logs to prevent feedback loop
-    # PM2 may truncate "watchtower-agent-xxx" to "watchtower-a" or shorter
-    # Match truncated or full agent name, but not "watchtower" exactly (the app)
-    if echo "$APP_NAME" | grep -qiE '^watchtower-'; then
+    if echo "$MESSAGE" | grep -qE '^\[(Logs|CMD|Health Check)\] '; then
       continue
     fi
 
