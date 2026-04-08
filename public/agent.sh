@@ -67,7 +67,8 @@ send_logs() {
     [ -z "$(echo "$MESSAGE" | tr -d '[:space:]')" ] && continue
 
     # Skip watchtower agent's own logs to prevent feedback loop
-    if echo "$APP_NAME" | grep -qi 'watchtow'; then
+    # Match "watchtower-agent" prefix (PM2 may truncate to "watchtower-agen" or similar)
+    if echo "$APP_NAME" | grep -qiE '^watchtower-agen'; then
       continue
     fi
 
