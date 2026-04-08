@@ -66,6 +66,11 @@ send_logs() {
     [ -z "$APP_NAME" ] && APP_NAME="unknown"
     [ -z "$(echo "$MESSAGE" | tr -d '[:space:]')" ] && continue
 
+    # Skip watchtower agent's own logs to prevent feedback loop
+    if echo "$APP_NAME" | grep -qi 'watchtow'; then
+      continue
+    fi
+
     PARSED_APPS+=("$APP_NAME")
     PARSED_MSGS+=("$MESSAGE")
   done <<< "$LOGS"
