@@ -87,7 +87,7 @@ export async function processAlerts(
 
 async function createAlert(
   serverId: string,
-  appId: string,
+  appId: string | null,
   type: string,
   message: string,
   severity: string
@@ -207,7 +207,7 @@ export async function checkServerOffline() {
 
     await createAlert(
       server.id,
-      "",
+      null,
       "server_offline",
       `⚠️ Server **${server.name}** is not responding`,
       "critical"
