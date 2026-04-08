@@ -140,9 +140,10 @@ export async function POST(request: NextRequest) {
     ];
 
     const newLogs = logs.filter((log) => {
+      // Drop noisy logs regardless of hash
+      if (log.message && NOISE_PATTERNS.some((p) => p.test(log.message))) return false;
       if (!log.hash) return true; // No hash = always insert
       if (existingHashes.has(log.hash)) return false;
-      if (log.message && NOISE_PATTERNS.some((p) => p.test(log.message))) return false;
       return true;
     });
 
