@@ -33,33 +33,27 @@ generate_hash() {
 # Function to collect and send logs in batch
 send_logs() {
   LOGS=$(pm2 logs --nostream --lines 50 2>/dev/null | tail -30)
-  
+
   if [ -z "$LOGS" ]; then
     return
   fi
-  
-  # Build JSON array of logs
-  LOG_ARRAY="["
-  FIRST=true
-  SENT_HASHES=""
-  
+
+  # First pass: parse lines into app_name + message pairs
+  declare -a PARSED_APPS=()
+  declare -a PARSED_MSGS=()
+
   while IFS= read -r line; do
     CLEAN_LINE=$(echo "$line" | sed 's/\x1b\[[0-9;]*m//g')
     [ -z "$(echo "$CLEAN_LINE" | tr -d '[:space:]')" ] && continue
     echo "$CLEAN_LINE" | grep -qE '(Tailing last|\.pm2/logs/|last [0-9]+ lines)' && continue
     echo "$CLEAN_LINE" | grep -qE '^[├└│─┼┤┬┴]+' && continue
-    
-    APP_NAME=""
-    MESSAGE="$CLEAN_LINE"
-    
+
     if echo "$CLEAN_LINE" | grep -qE '^PM2[[:space:]]+\|'; then
       continue
     fi
 
-    # Skip noisy Next.js Server Action errors (stale deployment cache)
-    if echo "$CLEAN_LINE" | grep -qE 'Failed to find Server Action'; then
-      continue
-    fi
+    APP_NAME=""
+    MESSAGE="$CLEAN_LINE"
 
     if echo "$CLEAN_LINE" | grep -qE '^[0-9]+\|'; then
       APP_NAME=$(echo "$CLEAN_LINE" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}')
@@ -68,53 +62,92 @@ send_logs() {
         MESSAGE=$(echo "$CLEAN_LINE" | sed -E 's/^[0-9]+\|[^|]+\|[ ]*//')
       fi
     fi
-    
+
     [ -z "$APP_NAME" ] && APP_NAME="unknown"
     [ -z "$(echo "$MESSAGE" | tr -d '[:space:]')" ] && continue
-    
-    # Generate hash for deduplication
+
+    PARSED_APPS+=("$APP_NAME")
+    PARSED_MSGS+=("$MESSAGE")
+  done <<< "$LOGS"
+
+  # Second pass: merge consecutive lines from the same app into one message
+  # A new log group starts when: app changes, or line looks like a new log entry
+  declare -a MERGED_APPS=()
+  declare -a MERGED_MSGS=()
+  declare -a MERGED_LEVELS=()
+
+  for i in "${!PARSED_APPS[@]}"; do
+    APP_NAME="${PARSED_APPS[$i]}"
+    MESSAGE="${PARSED_MSGS[$i]}"
+
+    # Detect if this line starts a new log entry (has a recognizable prefix)
+    IS_NEW_ENTRY=false
+    if echo "$MESSAGE" | grep -qE '^(GET |POST |PUT |PATCH |DELETE |HEAD |OPTIONS |✓ |Error:|error:|Warning:|warn:|INFO|WARN|ERROR|DEBUG|\[|[0-9]{4}-[0-9]{2})'; then
+      IS_NEW_ENTRY=true
+    fi
+
+    PREV_IDX=$((${#MERGED_APPS[@]} - 1))
+
+    if [ "$PREV_IDX" -ge 0 ] && [ "${MERGED_APPS[$PREV_IDX]}" = "$APP_NAME" ] && [ "$IS_NEW_ENTRY" = false ]; then
+      # Continuation line - append to previous entry
+      MERGED_MSGS[$PREV_IDX]="${MERGED_MSGS[$PREV_IDX]}"$'\n'"$MESSAGE"
+    else
+      # New log entry
+      MERGED_APPS+=("$APP_NAME")
+      MERGED_MSGS+=("$MESSAGE")
+      MERGED_LEVELS+=("")
+    fi
+  done
+
+  # Build JSON array from merged logs
+  LOG_ARRAY="["
+  FIRST=true
+  SENT_HASHES=""
+
+  for i in "${!MERGED_APPS[@]}"; do
+    APP_NAME="${MERGED_APPS[$i]}"
+    MESSAGE="${MERGED_MSGS[$i]}"
+
+    # Determine log level from first line
+    LEVEL="info"
+    FIRST_LINE=$(echo "$MESSAGE" | head -1)
+    if echo "$FIRST_LINE" | grep -qE '\[ERROR\]|\[error\]'; then
+      LEVEL="error"
+    elif echo "$FIRST_LINE" | grep -qE '\[WARN\]|\[warn\]|\[WARNING\]|\[warning\]'; then
+      LEVEL="warn"
+    elif echo "$FIRST_LINE" | grep -qE '\[DEBUG\]|\[debug\]'; then
+      LEVEL="debug"
+    elif echo "$FIRST_LINE" | grep -qE '\[INFO\]|\[info\]'; then
+      LEVEL="info"
+    else
+      echo "$FIRST_LINE" | grep -qiE '(error:|exception|fatal|failed:|crash)' && LEVEL="error"
+      echo "$FIRST_LINE" | grep -qiE '(warn:|warning:)' && LEVEL="warn"
+    fi
+
+    # Generate hash from full merged message
     HASH=$(generate_hash "$APP_NAME" "$MESSAGE")
-    
-    # Skip if we already sent this hash in this batch
+
+    # Skip duplicates
     if echo "$SENT_HASHES" | grep -q "$HASH"; then
       continue
     fi
-    
-    # Skip if hash was sent in recent state (last cycle)
     if grep -q "^$HASH$" "$LOG_STATE_FILE" 2>/dev/null; then
       continue
     fi
-    
+
     SENT_HASHES="$SENT_HASHES $HASH"
-    
-    # Determine log level
-    LEVEL="info"
-    if echo "$MESSAGE" | grep -qE '\[ERROR\]|\[error\]'; then
-      LEVEL="error"
-    elif echo "$MESSAGE" | grep -qE '\[WARN\]|\[warn\]|\[WARNING\]|\[warning\]'; then
-      LEVEL="warn"
-    elif echo "$MESSAGE" | grep -qE '\[DEBUG\]|\[debug\]'; then
-      LEVEL="debug"
-    elif echo "$MESSAGE" | grep -qE '\[INFO\]|\[info\]'; then
-      LEVEL="info"
-    else
-      echo "$MESSAGE" | grep -qiE '(error:|exception|fatal|failed:|crash)' && LEVEL="error"
-      echo "$MESSAGE" | grep -qiE '(warn:|warning:)' && LEVEL="warn"
-    fi
-    
-    # Build JSON object for this log
+
     MESSAGE_JSON=$(echo "$MESSAGE" | jq -Rs .)
-    
+
     if [ "$FIRST" = true ]; then
       FIRST=false
     else
       LOG_ARRAY+=","
     fi
-    
+
     LOG_ARRAY+="{\"server_id\": \"$SERVER_ID\", \"app_name\": \"$APP_NAME\", \"level\": \"$LEVEL\", \"message\": $MESSAGE_JSON, \"hash\": \"$HASH\"}"
-    
-  done <<< "$LOGS"
-  
+  done
+
   LOG_ARRAY+="]"
   
   # Only send if we have logs
