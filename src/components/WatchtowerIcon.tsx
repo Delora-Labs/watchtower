@@ -28,7 +28,7 @@ export function WatchtowerIcon({ className = "w-8 h-8" }: { className?: string }
         strokeLinecap="round"
       />
       {/* Light glow center */}
-      <circle cx="32" cy="20" r="4" fill="#FCD34D" />
+      <circle cx="32" cy="20" r="6" fill="#FCD34D" />
       {/* Windows */}
       <rect x="29" y="34" width="6" height="8" rx="1" fill="#0F172A" stroke="#60A5FA" strokeWidth="1" />
       <rect x="29" y="46" width="6" height="8" rx="1" fill="#0F172A" stroke="#60A5FA" strokeWidth="1" />
@@ -44,19 +44,15 @@ export function WatchtowerIcon({ className = "w-8 h-8" }: { className?: string }
 }
 
 export function WatchtowerBeacon({ className = "" }: { className?: string }) {
-  // Lamp position: SVG cy=20 in 64x64 viewBox = 31.25% from top
-  // At 96px height = 30px from top
-  const lampY = 30;
-  const lampX = 48; // center
-  
+  // Lamp position: SVG cy=20 in 64x64 viewBox = 31.25% from top, cx=32 = 50% from left
   return (
-    <div className={`relative ${className}`} style={{ width: '96px', height: '96px' }}>
+    <div className={`relative w-24 h-24 ${className}`}>
       {/* Rotating beams - positioned at lamp, behind the icon */}
-      <div 
+      <div
         className="absolute animate-beacon-rotate"
         style={{
-          top: `${lampY}px`,
-          left: `${lampX}px`,
+          top: '31.25%',
+          left: '50%',
           width: '0',
           height: '0',
         }}
@@ -91,24 +87,25 @@ export function WatchtowerBeacon({ className = "" }: { className?: string }) {
         />
       </div>
 
+      {/* Lamp glow - pulsing, large enough to spill onto adjacent text */}
+      <div
+        className="absolute z-20 animate-pulse pointer-events-none"
+        style={{
+          top: '31.25%',
+          left: '50%',
+          width: '220%',
+          height: '220%',
+          transform: 'translate(-50%, -50%)',
+          background: 'radial-gradient(circle, rgba(255,255,200,0.95) 0%, rgba(252,211,77,0.7) 15%, rgba(252,211,77,0.35) 35%, rgba(252,211,77,0.1) 60%, transparent 100%)',
+          borderRadius: '50%',
+          filter: 'blur(6px)',
+        }}
+      />
+
       {/* Tower icon - on top */}
       <div className="absolute inset-0 z-10">
         <WatchtowerIcon className="w-full h-full" />
       </div>
-
-      {/* Lamp glow - pulsing */}
-      <div 
-        className="absolute z-20 animate-pulse"
-        style={{
-          top: `${lampY - 6}px`,
-          left: `${lampX - 6}px`,
-          width: '12px',
-          height: '12px',
-          background: 'radial-gradient(circle, rgba(255,255,200,1) 0%, rgba(252,211,77,0.8) 40%, transparent 100%)',
-          borderRadius: '50%',
-          filter: 'blur(2px)',
-        }}
-      />
     </div>
   );
 }

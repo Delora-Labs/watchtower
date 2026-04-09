@@ -1271,9 +1271,11 @@ export default function Dashboard() {
       {/* Header */}
       <header className="border-b border-gray-800 bg-gray-900/50 backdrop-blur sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-3 md:py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <WatchtowerIcon className="w-9 h-9 md:w-10 md:h-10 flex-shrink-0" />
-            <div>
+          <div className="flex items-center gap-3 relative">
+            <div className="flex-shrink-0 w-10 h-10 md:w-12 md:h-12 relative overflow-visible">
+              <WatchtowerBeacon className="!w-full !h-full" />
+            </div>
+            <div className="relative z-0">
               <h1 className="text-lg md:text-xl font-bold">Watchtower</h1>
               <p className="text-xs text-gray-400 hidden sm:block">Delora Labs Monitoring System</p>
             </div>
@@ -2315,11 +2317,6 @@ export default function Dashboard() {
           </div>
         )}
       </main>
-      
-      {/* Watchtower beacon animation - bottom right */}
-      <div className="fixed bottom-6 right-6 opacity-30 hover:opacity-60 transition-opacity pointer-events-none hidden md:block">
-        <WatchtowerBeacon />
-      </div>
     </div>
   );
 }
